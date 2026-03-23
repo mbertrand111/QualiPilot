@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Environment variables (never commit!)
+.env
+
+# Build artifacts
+dist/
+build/
+
+# SQLite database (données locales — ne pas commiter)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/

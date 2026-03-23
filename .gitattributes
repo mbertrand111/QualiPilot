@@ -1,0 +1,9 @@
+# Normaliser les fins de ligne : LF dans le repo, CRLF sur Windows au checkout
+* text=auto eol=lf
+
+# Fichiers binaires — pas de conversion
+*.db binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
