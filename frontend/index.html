@@ -3,9 +3,81 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>IAckathon 2026</title>
+    <title>QualiPilot</title>
+    <link rel="icon" href="/favicon.png" type="image/png" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Outfit', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+            },
+            colors: {
+              brand: {
+                primary:    '#1E63B6',
+                dark:       '#0F3E8A',
+                medium:     '#2F7EDC',
+                cyan:       '#66D2DB',
+                'cyan-light': '#8FE6EE',
+              },
+            },
+          },
+        },
+      }
+    </script>
+
+    <style>
+      /* Hide the legacy App.tsx nav — navigation handled by sidebar */
+      #root > nav:first-child {
+        display: none !important;
+      }
+
+      /* Sidebar subtle grid texture */
+      .sidebar-texture {
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+        background-size: 22px 22px;
+      }
+
+      /* Custom scrollbar */
+      ::-webkit-scrollbar { width: 5px; height: 5px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #c7d2e8; border-radius: 99px; }
+      ::-webkit-scrollbar-thumb:hover { background: #9aaac8; }
+
+      /* Sync button pulse */
+      @keyframes sync-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.45); }
+        50%       { box-shadow: 0 0 0 9px rgba(59, 130, 246, 0); }
+      }
+      .sync-pulsing { animation: sync-pulse 1.4s ease-in-out infinite; }
+
+      /* Staggered fade-in for page content */
+      @keyframes fade-up {
+        from { opacity: 0; transform: translateY(10px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      .fade-up { animation: fade-up 0.35s ease both; }
+      .fade-up-1 { animation-delay: 0.05s; }
+      .fade-up-2 { animation-delay: 0.10s; }
+      .fade-up-3 { animation-delay: 0.15s; }
+      .fade-up-4 { animation-delay: 0.20s; }
+
+      /* Smooth global transitions (bg/color only, not transforms/layout) */
+      a, button { transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease, opacity 150ms ease, box-shadow 150ms ease; }
+    </style>
   </head>
-  <body>
+  <body class="font-sans antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

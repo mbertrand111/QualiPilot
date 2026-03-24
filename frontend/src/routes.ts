@@ -6,9 +6,10 @@ type RouteConfig = {
   component: LazyExoticComponent<ComponentType>;
 };
 
-// ─── CHAQUE PERSONNE AJOUTE SA LIGNE ICI ─────────────────────────────────────
 export const routes: RouteConfig[] = [
-  // { path: '/feature-a', label: 'Feature A', component: lazy(() => import('./pages/FeatureA')) },
-  // { path: '/feature-b', label: 'Feature B', component: lazy(() => import('./pages/FeatureB')) },
+  { path: '/conformity',     label: 'Anomalies',   component: lazy(() => import('./pages/Conformity'))       },
+  { path: '/conformity/:bugId', label: '',          component: lazy(() => import('./pages/ConformityDetail')) },
+  { path: '/kpis',           label: 'KPIs',         component: lazy(() => import('./pages/Kpis'))             },
+  { path: '/history',        label: 'Historique',   component: lazy(() => import('./pages/History'))          },
+  { path: '/settings',       label: 'Paramètres',   component: lazy(() => import('./pages/Settings'))         },
 ];
-// ─────────────────────────────────────────────────────────────────────────────

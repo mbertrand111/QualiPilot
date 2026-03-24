@@ -8,12 +8,18 @@ Ce fichier est lu automatiquement par Claude Code comme contexte du projet.
 
 ```
 Project Name  : QualiPilot
-Problem       : Le pilotage qualité repose aujourd'hui sur plusieurs outils disparates
-                (Azure DevOps, Power BI, suivi manuel), sans vue unifiée ni actions directes.
-Target Users  : Quality Manager interne (usage solo dans un premier temps)
-Objective     : Application web interne centralisant contrôles de conformité des bugs,
-                dashboards qualité, historisation automatique des indicateurs,
-                et actions correctives directes sur Azure DevOps.
+Problem       : Aujourd'hui, le suivi qualité des bugs repose sur des données éclatées et des
+                contrôles partiellement manuels, ce qui empêche un pilotage centralisé, fiable
+                et actionnable — d'où le besoin d'un cockpit unique permettant de contrôler,
+                suivre et agir directement sur la qualité dans Azure DevOps.
+Target Users  : Quality Manager interne (usage solo)
+Objective     : Cockpit web centralisé permettant de détecter les anomalies de conformité,
+                suivre les KPIs qualité dans le temps, et corriger directement les bugs ADO.
+Key Features  : 1. Sync ADO — fetch bugs depuis ADO, stocke en cache SQLite
+              : 2. Moteur de conformité — évaluation des 6 règles, stocke les violations
+              : 3. Dashboard + liste anomalies — vue d'ensemble + filtres par équipe/règle
+              : 4. Détail bug + write ADO — correction directe des champs + audit log
+              : 5. KPI & historique — defect debt, backlog, snapshots automatiques
 ```
 
 ---
@@ -218,7 +224,7 @@ CREATE TABLE ado_write_audit (
 
 ---
 
-## Règles de conformité implémentées
+## Règles de conformité implémentées (10 règles)
 
 ### PRIORITY_CHECK
 Tous les bugs doivent être en priorité 2.
@@ -227,24 +233,62 @@ Tous les bugs doivent être en priorité 2.
 
 ### VERSION_SOUHAITEE_CHECK
 La "Version souhaitée GC" doit correspondre à un format valide.
-- Formats valides : contient `FAH_` · `Outil Jbeg` · `Sonarqube` · `Isasite` · `Isacuve Web` · `git` · `12.` · `13.8` · `14.` · `-` · `Non concerné`
+- Format Live : `FAH_xx.yy` — xx = année (25, 26, 27…), yy = multiple de 10 (10, 20, 30…)
+- Format Historique : `13.87.xxx`
+- Valeurs spéciales acceptées : `Outil Jbeg` · `Sonarqube` · `Isasite` · `Isacuve Web` · `git` · `12.` · `13.8` · `14.` · `-` · `Non concerné`
 - Ciblé sur les bugs actifs uniquement
 
 ### INTEGRATION_BUILD_REQUIRED
-Les bugs fermés (Closed/Resolved) modifiés récemment doivent avoir un Integration Build valide.
-- La liste des builds valides évolue à chaque release — stockée en configuration JSON
-- Valeurs spéciales acceptées : `Isasite` · `Outil Jbeg` · `Isacuve Web` · `-` · `/` · `Non concerné`
+Les bugs fermés (Closed/Resolved) doivent avoir un Integration Build valide et cohérent avec la Version souhaitée.
+- Valeurs spéciales acceptées : `Isasite` · `Outil Jbeg` · `Isacuve Web` · `-` · `Non concerné`
+- La liste des builds valides évolue à chaque release — stockée en configuration JSON (paramétrable)
+
+### VERSION_BUILD_COHERENCE
+Le Integration Build doit être cohérent avec la Version souhaitée GC.
+- **Historique** : pour version souhaitée `13.87.200` → builds valides de `13.87.151` à `13.87.199`
+  (règle générale : entre la version majeure précédente +1 et la version souhaitée -1)
+  Versions majeures : 13.87.150, 13.87.200, 13.87.250, 13.87.300… (configurables)
+- **Live** : pour `FAH_26.20` → builds valides `26.11.xxx` (car version précédente = 26.10)
+  Pour `FAH_26.10` → builds valides `25.31.xxx` (car version précédente = 25.30 de l'année d'avant)
+- **Exception Patch** : format accepté `Version FAH_26.10 Patch X - Build 26.10.001-X`
+  (idem OnPremise)
+- La table de correspondance version↔builds est **entièrement configurable** en JSON
 
 ### INTEGRATION_BUILD_NOT_EMPTIED
-Les bugs actifs (non Closed/Resolved) ne doivent pas avoir un Integration Build renseigné.
-- Violation si : `State <> Closed AND State <> Resolved AND Integration Build <> ''`
+Les bugs à l'état Active ou New ne doivent pas avoir un Integration Build renseigné.
+- Violation si : `State IN ('Active', 'New') AND Integration Build <> ''`
 
 ### CLOSED_BUG_COHERENCE
-Un bug fermé avec motif autre que "Corrigé" ou "Réalisé" ne doit pas avoir de Version souhaitée ou Integration Build renseigné (hors `-`).
+Un bug fermé sans correction doit avoir `-` dans les DEUX champs Version souhaitée ET Integration Build.
+- Condition : `Resolved Reason Custom <> 'Corrigé' AND Resolved Reason Custom <> 'Réalisé'`
+- Violation si l'un des deux champs est absent ou différent de `-`
+- Les deux champs doivent obligatoirement contenir `-` dans ce cas
+
+### NON_CONCERNE_COHERENCE
+Si un bug a `Non concerné` dans l'un des champs, l'autre doit également contenir `Non concerné`.
+- Violation si : un champ = `Non concerné` ET l'autre champ ≠ `Non concerné`
+- Cas : bug sur périmètre non applicatif / non lié à une livraison
 
 ### FAH_VERSION_REQUIRED
-Les bugs trouvés sur versions FAH récentes (`Found In > 17`) doivent avoir une Version souhaitée GC contenant `FAH`.
+Les bugs trouvés sur des versions FAH modernes doivent avoir une Version souhaitée GC contenant `FAH`.
+- **Versions FAH modernes** : `Found In` commence par une année ≥ 24 (ex : `24.`, `25.`, `26.`, `27.`…)
+  Format : `xx.yy` où xx = année à 2 chiffres, yy = numéro de sortie multiple de 10
+- **Anciennes versions FAH** (14.xx–17.xx) : format pré-2024, non concernées par cette règle
+- Violation si Found In ≥ `24.` ET Version souhaitée ne contient pas `FAH`
 - Exceptions : `-` · `Non concerné` · `Isasite` · `Outil Jbeg` · `git` · `Isacuve Web` · `Migration`
+
+### CLOSED_BUG_IN_TRIAGE_AREA
+Un bug fermé (Closed) dans les zones de triage ne doit pas avoir une Version souhaitée GC différente de `-`.
+- Areas concernées :
+  - `Isagri_Dev_GC_GestionCommerciale\Bugs à prioriser`
+  - `Isagri_Dev_GC_GestionCommerciale\Bugs à corriger`
+- Violation si : `State = 'Closed' AND Area Path IN (zones triage) AND Version souhaitée <> '-'`
+
+### AREA_PATH_PRODUCT_COHERENCE
+Les bugs dans "Bugs à corriger" doivent être dans le bon sous-dossier selon leur version Found In.
+- Found In commence par une année ≥ 25 (Live) → Area Path doit être `...\Bugs à corriger\Versions LIVE`
+- Found In commence par `13.` (≤ 13.99) (OnPremise) → Area Path doit être `...\Bugs à corriger\Versions historiques`
+- Violation si le sous-dossier ne correspond pas au produit détecté
 
 ---
 
