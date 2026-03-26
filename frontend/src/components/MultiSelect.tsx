@@ -55,12 +55,19 @@ export function MultiSelect({ label, options, selected, onChange, renderOption }
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{label}</span>
-            {hasSelection && (
+            {hasSelection ? (
               <button
                 onClick={() => onChange([])}
+                className="text-[11px] text-gray-400 hover:text-gray-600 hover:underline font-medium"
+              >
+                Réinitialiser
+              </button>
+            ) : (
+              <button
+                onClick={() => onChange([...options])}
                 className="text-[11px] text-[#1E63B6] hover:underline font-medium"
               >
-                Tout effacer
+                Tout sélectionner
               </button>
             )}
           </div>

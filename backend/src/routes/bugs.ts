@@ -51,6 +51,25 @@ router.get('/bugs', (req, res) => {
   if (found_in_contains) { conditions.push('found_in LIKE ?');              params.push(`%${found_in_contains}%`); }
   if (build_contains)    { conditions.push('integration_build LIKE ?');     params.push(`%${build_contains}%`); }
 
+  const oldMonthsRaw = typeof req.query.old_months === 'string' ? parseInt(req.query.old_months, 10) : null;
+  const oldMonths    = oldMonthsRaw !== null && !isNaN(oldMonthsRaw) && oldMonthsRaw > 0 ? oldMonthsRaw : null;
+  if (oldMonths !== null) {
+    conditions.push(`state IN ('New', 'Active')`);
+    conditions.push(`created_date <= date('now', '-${oldMonths} months')`);
+  }
+
+  const validBugTypes = new Set(['live', 'onpremise', 'hors_version', 'uncategorized']);
+  const bugTypes = typeof req.query.bug_type === 'string' && req.query.bug_type
+    ? req.query.bug_type.split(',').filter(v => validBugTypes.has(v))
+    : [];
+  if (bugTypes.length === 1) {
+    conditions.push('classify_bug(version_souhaitee, found_in) = ?');
+    params.push(bugTypes[0]);
+  } else if (bugTypes.length > 1) {
+    conditions.push(`classify_bug(version_souhaitee, found_in) IN (${bugTypes.map(() => '?').join(',')})`);
+    params.push(...bugTypes);
+  }
+
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const total = (db.prepare(`SELECT COUNT(*) as n FROM bugs_cache ${where}`).get(...params) as { n: number }).n;
@@ -75,6 +94,18 @@ router.get('/bugs/meta/teams', (_req, res) => {
   const db = getDb();
   const teams = db.prepare(`SELECT DISTINCT team FROM bugs_cache WHERE team IS NOT NULL ORDER BY team`).all();
   res.json((teams as { team: string }[]).map(r => r.team));
+});
+
+// GET /api/bugs/meta/areas — area paths distincts du cache, avec label dérivé
+// Utilisé pour alimenter le dropdown de déplacement de zone
+router.get('/bugs/meta/areas', (_req, res) => {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT DISTINCT area_path FROM bugs_cache
+    WHERE area_path IS NOT NULL
+    ORDER BY area_path
+  `).all() as { area_path: string }[];
+  res.json(rows.map(r => r.area_path));
 });
 
 // GET /api/bugs/meta/sprints

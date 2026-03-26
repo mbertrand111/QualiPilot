@@ -54,11 +54,11 @@ interface ConfirmState {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(v: string | null | undefined): string {
-  return v?.trim() ? v.trim() : '—';
+  return v?.trim() ?? '';
 }
 
 function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return '';
   try {
     return new Date(iso).toLocaleDateString('fr-FR', {
       day: '2-digit', month: '2-digit', year: 'numeric',
@@ -70,7 +70,7 @@ function fmtDate(iso: string | null | undefined): string {
 }
 
 function fmtDateShort(iso: string | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return '';
   try {
     return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
   } catch {
@@ -84,7 +84,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between items-baseline py-2 border-b border-gray-50 last:border-0 gap-4">
       <span className="text-xs text-gray-400 font-medium shrink-0">{label}</span>
-      <span className="text-xs font-mono font-semibold text-gray-700 text-right truncate max-w-[210px]">{value || '—'}</span>
+      <span className="text-xs font-mono font-semibold text-gray-700 text-right truncate max-w-[210px]">{value}</span>
     </div>
   );
 }
@@ -245,8 +245,14 @@ export default function ConformityDetail() {
           {/* Bug header */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <div className="mb-5">
-              <span className="font-mono text-xs font-semibold text-gray-400">#{bug.id}</span>
-              <h2 className="text-[17px] font-bold text-[#0e1a38] mt-1">{bug.title ?? '—'}</h2>
+              <a
+                href={`https://dev.azure.com/Isagri-Prod-Progiciels/Isagri_Dev_GC_GestionCommerciale/_workitems/edit/${bug.id}`}
+                target="_blank" rel="noopener noreferrer"
+                className="font-mono text-xs font-semibold text-[#1E63B6] hover:underline"
+              >
+                #{bug.id} ↗
+              </a>
+              <h2 className="text-[17px] font-bold text-[#0e1a38] mt-1">{bug.title ?? ''}</h2>
               <div className="flex items-center flex-wrap gap-2 mt-3">
                 {bug.state && (
                   <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full">{bug.state}</span>

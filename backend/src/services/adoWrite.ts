@@ -14,6 +14,40 @@ interface FieldDef {
   validate: (v: unknown) => boolean;
 }
 
+// Zones ADO autorisées pour le déplacement de bugs
+export const ALLOWED_AREA_PATHS: Record<string, string> = {
+  // Zones de triage
+  'Bugs à prioriser':          'Isagri_Dev_GC_GestionCommerciale\\Bugs à prioriser',
+  'À corriger — Live':         'Isagri_Dev_GC_GestionCommerciale\\Bugs à corriger\\Versions LIVE',
+  'À corriger — OnPremise':    'Isagri_Dev_GC_GestionCommerciale\\Bugs à corriger\\Versions historiques',
+  'À corriger — Hors version': 'Isagri_Dev_GC_GestionCommerciale\\Bugs à corriger\\Hors versions',
+  // Équipes
+  'COCO':          'Isagri_Dev_GC_GestionCommerciale\\COCO',
+  'GO FAHST':      'Isagri_Dev_GC_GestionCommerciale\\GO FAHST',
+  'JURASSIC BACK': 'Isagri_Dev_GC_GestionCommerciale\\JURASSIC BACK',
+  'MAGIC SYSTEM':  'Isagri_Dev_GC_GestionCommerciale\\MAGIC SYSTEM',
+  'MELI MELO':     'Isagri_Dev_GC_GestionCommerciale\\MELI MELO',
+  'NULL.REF':      'Isagri_Dev_GC_GestionCommerciale\\NULL.REF',
+  'PIXELS':        'Isagri_Dev_GC_GestionCommerciale\\PIXELS',
+  'LACE':          'Isagri_Dev_GC_GestionCommerciale\\LACE',
+};
+
+const ALLOWED_AREA_PATH_VALUES = new Set(Object.values(ALLOWED_AREA_PATHS));
+
+// Dérive le nom d'équipe depuis l'area path (miroir de sync.ts)
+function deriveTeamFromAreaPath(areaPath: string): string | null {
+  const parts = areaPath.split('\\');
+  if (parts.length < 2) return null;
+  const level1 = parts[1];
+  if (level1 === 'Bugs à corriger' && parts.length >= 3) {
+    const sub = parts[2];
+    if (sub === 'Versions LIVE')        return 'Bugs à corriger LIVE';
+    if (sub === 'Versions historiques') return 'Bugs à corriger OnPremise';
+    return `Bugs à corriger ${sub}`;
+  }
+  return level1;
+}
+
 export const WRITABLE_FIELDS: Record<string, FieldDef> = {
   priority: {
     ado_ref:      'Microsoft.VSTS.Common.Priority',
@@ -29,6 +63,12 @@ export const WRITABLE_FIELDS: Record<string, FieldDef> = {
     ado_ref:      CUSTOM_FIELD_REFS.versionSouhaitee,
     cache_column: 'version_souhaitee',
     validate:     (v) => typeof v === 'string' && (v as string).length <= 255,
+  },
+  area_path: {
+    ado_ref:      'System.AreaPath',
+    cache_column: 'area_path',
+    // Valide que c'est une string non-vide commençant par le projet ADO connu
+    validate:     (v) => typeof v === 'string' && (v as string).startsWith('Isagri_Dev_GC_GestionCommerciale\\') && (v as string).length <= 500,
   },
 } as const;
 
@@ -104,6 +144,11 @@ export async function writeField(
   // Update cache + audit (dans une transaction)
   db.transaction(() => {
     db.prepare(`UPDATE bugs_cache SET ${fieldDef.cache_column} = ? WHERE id = ?`).run(value, bugId);
+    // Mise à jour de la colonne dérivée team quand area_path change
+    if (field === 'area_path') {
+      const team = deriveTeamFromAreaPath(value as string);
+      db.prepare(`UPDATE bugs_cache SET team = ? WHERE id = ?`).run(team, bugId);
+    }
     db.prepare(`
       INSERT INTO ado_write_audit (work_item_id, field, old_value, new_value, performed_at)
       VALUES (?, ?, ?, ?, datetime('now'))

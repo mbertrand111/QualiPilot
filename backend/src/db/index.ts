@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { config } from '../config';
 import logger from '../logger';
+import { classifyBug } from '../services/bugClassifier';
 
 let _db: Database.Database | null = null;
 
@@ -12,6 +13,7 @@ export function getDb(): Database.Database {
   _db = new Database(config.databasePath);
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
+  _db.function('classify_bug', (vs: string | null, fi: string | null): string => classifyBug(vs, fi));
 
   const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
   _db.exec(schema);

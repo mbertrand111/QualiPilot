@@ -7,9 +7,9 @@ type RouteConfig = {
 };
 
 export const routes: RouteConfig[] = [
-  { path: '/bugs',           label: 'Bugs',         component: lazy(() => import('./pages/BugList'))          },
   { path: '/conformity',     label: 'Anomalies',   component: lazy(() => import('./pages/Conformity'))       },
   { path: '/conformity/:bugId', label: '',          component: lazy(() => import('./pages/ConformityDetail')) },
+  { path: '/triage',         label: 'Bugs à trier', component: lazy(() => import('./pages/Triage'))           },
   { path: '/kpis',           label: 'KPIs',         component: lazy(() => import('./pages/Kpis'))             },
   { path: '/history',        label: 'Historique',   component: lazy(() => import('./pages/History'))          },
   { path: '/settings',       label: 'Paramètres',   component: lazy(() => import('./pages/Settings'))         },

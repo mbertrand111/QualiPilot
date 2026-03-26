@@ -5,9 +5,9 @@ import { describe, it, expect } from 'vitest';
 import { WRITABLE_FIELDS } from './adoWrite';
 
 describe('WRITABLE_FIELDS whitelist', () => {
-  it('contient exactement priority, integration_build, version_souhaitee', () => {
+  it('contient exactement area_path, priority, integration_build, version_souhaitee', () => {
     expect(Object.keys(WRITABLE_FIELDS).sort()).toEqual(
-      ['integration_build', 'priority', 'version_souhaitee'],
+      ['area_path', 'integration_build', 'priority', 'version_souhaitee'],
     );
   });
 

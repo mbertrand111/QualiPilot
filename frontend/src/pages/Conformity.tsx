@@ -11,9 +11,7 @@ type SortDir = 'asc' | 'desc';
 type WritableField = 'priority' | 'version_souhaitee' | 'integration_build';
 
 interface Violation {
-  id: number;
   bug_id: number;
-  detected_at: string;
   bug_title: string | null;
   bug_state: string | null;
   bug_team: string | null;
@@ -22,9 +20,6 @@ interface Violation {
   bug_integration_build: string | null;
   bug_found_in: string | null;
   bug_changed_date: string | null;
-  rule_code: string;
-  rule_description: string;
-  severity: Severity;
 }
 
 interface ViolationsResponse {
@@ -32,6 +27,7 @@ interface ViolationsResponse {
   page: number;
   limit: number;
   violations: Violation[];
+  rule_counts: { rule_code: string; count: number }[];
 }
 
 interface RunResult {
@@ -246,6 +242,7 @@ function EditableCell({ bugId, field, currentValue, editing, editValue, onStartE
 export default function Conformity() {
   const navigate = useNavigate();
   const [violations, setViolations] = useState<Violation[]>([]);
+  const [ruleCounts, setRuleCounts] = useState<{ rule_code: string; count: number }[]>([]);
   const [total, setTotal]           = useState(0);
   const [page, setPage]             = useState(1);
   const [loading, setLoading]       = useState(true);
@@ -312,6 +309,7 @@ export default function Conformity() {
       if (!res.ok) throw new Error(`Erreur ${res.status}`);
       const data: ViolationsResponse = await res.json();
       setViolations(data.violations);
+      setRuleCounts(data.rule_counts ?? []);
       setTotal(data.total);
       setPage(p);
     } catch (e) {
@@ -460,12 +458,6 @@ export default function Conformity() {
   const hasFilters  = filterTeams.length || filterRules.length || filterStates.length || filterTitle || filterVersion || filterFoundIn || filterBuild;
   const totalPages  = Math.ceil(total / LIMIT);
 
-  // Comptage par règle (sur la page courante)
-  const countByRule = violations.reduce<Record<string, number>>((acc, v) => {
-    acc[v.rule_code] = (acc[v.rule_code] ?? 0) + 1;
-    return acc;
-  }, {});
-  const rulesSorted = Object.entries(countByRule).sort((a, b) => b[1] - a[1]);
 
   const busy = syncEvalStep !== 'idle';
   const headerActions = (
@@ -525,21 +517,21 @@ export default function Conformity() {
       <div className="flex items-center gap-2 mb-5 flex-wrap">
         {loading
           ? <span className="text-sm text-gray-400">Chargement…</span>
-          : rulesSorted.length === 0
+          : ruleCounts.length === 0
             ? <span className="text-sm text-gray-400">Aucune anomalie</span>
-            : rulesSorted.map(([code, count]) => (
+            : ruleCounts.map(({ rule_code, count }) => (
                 <button
-                  key={code}
-                  onClick={() => setFilterRules(prev => prev.includes(code) ? prev.filter(r => r !== code) : [...prev, code])}
-                  className={`flex items-center gap-2 rounded-xl px-3 py-1.5 border text-[11px] font-semibold transition-colors ${filterRules.includes(code) ? 'bg-[#1E63B6] text-white border-[#1E63B6]' : 'bg-white text-gray-700 border-gray-200 hover:border-[#1E63B6] hover:text-[#1E63B6]'}`}
-                  title={`Filtrer par règle ${code}`}
+                  key={rule_code}
+                  onClick={() => setFilterRules(prev => prev.includes(rule_code) ? prev.filter(r => r !== rule_code) : [...prev, rule_code])}
+                  className={`flex items-center gap-2 rounded-xl px-3 py-1.5 border text-[11px] font-semibold transition-colors ${filterRules.includes(rule_code) ? 'bg-[#1E63B6] text-white border-[#1E63B6]' : 'bg-white text-gray-700 border-gray-200 hover:border-[#1E63B6] hover:text-[#1E63B6]'}`}
+                  title={`Filtrer par règle ${rule_code}`}
                 >
-                  <span className="font-mono">{code}</span>
-                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${filterRules.includes(code) ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'}`}>{count}</span>
+                  <span className="font-mono">{rule_code}</span>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${filterRules.includes(rule_code) ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'}`}>{count}</span>
                 </button>
               ))
         }
-        <span className="text-sm text-gray-400 font-mono ml-auto">{total.toLocaleString('fr-FR')} anomalie{total !== 1 ? 's' : ''} au total</span>
+        <span className="text-sm text-gray-400 font-mono ml-auto">{total.toLocaleString('fr-FR')} bug{total !== 1 ? 's' : ''} avec anomalie{total !== 1 ? 's' : ''} au total</span>
       </div>
 
       {/* Filtres */}

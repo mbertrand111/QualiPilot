@@ -33,6 +33,36 @@ Key Features  : 1. Sync ADO — fetch bugs depuis ADO, stocke en cache SQLite
 | Produit hébergé | `fah` | **Live** | `FAH_xx.yy` (ex: FAH_26.20) |
 | Produit on-premise | `onpremise` | **Historique** | `13.87.xxx` |
 
+### Classification des bugs (Live / OnPremise / Hors Version)
+
+La classification se fait en priorité sur **Version souhaitée GC**, et en repli sur **Found In** si ce champ est vide.
+
+#### Bug LIVE
+- **Version souhaitée** contient un pattern de version Live :
+  - `14.xx`, `15.xx`, `16.xx`, `17.xx` (anciennes versions FAH)
+  - `13.99.xx` (cas limite FAH)
+  - `24.xx`, `25.xx`, `26.xx`, ou toute année ≥ 24 (versions modernes)
+  - Le champ commence souvent par `FAH_` mais **ne pas se baser uniquement sur ce préfixe** (saisie incorrecte possible)
+- Si Version souhaitée est vide → appliquer la même règle sur **Found In**
+- **Cas particulier** : si **Found In** contient le mot `Migration` → le bug est considéré **LIVE** (Version souhaitée doit respecter les conditions Live)
+
+#### Bug ONPREMISE
+- **Version souhaitée** contient un pattern de version OnPremise :
+  - `11.xx`, `12.xx`
+  - `13.xx` avec valeur **< 13.99** (ex: `13.85`, `13.86`, `13.87.xxx`)
+  - Ne doit **pas** inclure `13.99.xx` (qui est Live)
+- Si Version souhaitée est vide → appliquer la même règle sur **Found In**
+
+#### Bug HORS VERSION
+- **Version souhaitée** est exactement `Non concerné`
+- Ces bugs sont sur un périmètre non applicable à une version de livraison
+
+#### Bug NON CATÉGORISÉ
+- Ne rentre dans aucune des catégories ci-dessus
+- Doit être à zéro en fonctionnement normal — catégorie temporaire pour détecter des cas non couverts
+
+> **Note d'implémentation** : cette logique de classification doit être centralisée dans un helper unique (ex: `classifyBug(versionSouhaitee, foundIn)`) réutilisé par le moteur de conformité et les KPIs. Ne jamais dupliquer cette logique.
+
 ### Équipes (8 équipes actives)
 COCO · GO FAHST · JURASSIC BACK · MAGIC SYSTEM · MELI MELO · NULL.REF · PIXELS · LACE
 
