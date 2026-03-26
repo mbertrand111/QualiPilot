@@ -134,7 +134,12 @@ export async function runSync(): Promise<{ synced: number; lastSyncAt: string }>
 
   const syncAll = db.transaction((items: ReturnType<typeof mapBug>[]) => {
     for (const item of items) upsert.run(item);
-    // Purger les bugs non présents dans ce cycle (absents d'ADO depuis le dernier sync)
+    // Supprimer d'abord les violations liées aux bugs absents (contrainte FK)
+    db.prepare(`
+      DELETE FROM conformity_violations
+      WHERE bug_id IN (SELECT id FROM bugs_cache WHERE last_synced_at < ?)
+    `).run(syncStart);
+    // Puis supprimer les bugs absents de ce cycle
     db.prepare(`DELETE FROM bugs_cache WHERE last_synced_at < ?`).run(syncStart);
   });
 

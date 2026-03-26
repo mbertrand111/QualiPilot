@@ -7,6 +7,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Severity = 'error' | 'warning';
+type SortDir = 'asc' | 'desc';
 type WritableField = 'priority' | 'version_souhaitee' | 'integration_build';
 
 interface Violation {
@@ -17,9 +18,10 @@ interface Violation {
   bug_state: string | null;
   bug_team: string | null;
   bug_priority: number | null;
-  bug_sprint: string | null;
   bug_version_souhaitee: string | null;
   bug_integration_build: string | null;
+  bug_found_in: string | null;
+  bug_changed_date: string | null;
   rule_code: string;
   rule_description: string;
   severity: Severity;
@@ -77,25 +79,62 @@ const FIELD_LABELS: Record<WritableField, string> = {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function SeverityBadge({ severity }: { severity: Severity }) {
-  return severity === 'error' ? (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200">
-      <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-      Erreur
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-      Avertissement
-    </span>
-  );
-}
 
 function RunIcon({ spinning }: { spinning: boolean }) {
   return (
     <svg className={`w-4 h-4 shrink-0 ${spinning ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
+  );
+}
+
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return (
+    <svg className="w-3 h-3 text-gray-300 ml-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+    </svg>
+  );
+  return dir === 'asc'
+    ? <svg className="w-3 h-3 text-[#1E63B6] ml-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
+    : <svg className="w-3 h-3 text-[#1E63B6] ml-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>;
+}
+
+const STATE_STYLES: Record<string, string> = {
+  'New':      'bg-blue-50 text-blue-700 border border-blue-200',
+  'Active':   'bg-amber-50 text-amber-700 border border-amber-200',
+  'Resolved': 'bg-violet-50 text-violet-700 border border-violet-200',
+  'Closed':   'bg-gray-100 text-gray-500 border border-gray-200',
+};
+
+function StateBadge({ state }: { state: string }) {
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold ${STATE_STYLES[state] ?? 'bg-gray-100 text-gray-600'}`}>
+      {state}
+    </span>
+  );
+}
+
+interface ThProps {
+  col: string;
+  label: string;
+  sort: string;
+  dir: SortDir;
+  onSort: (col: string) => void;
+  className?: string;
+}
+
+function Th({ col, label, sort, dir, onSort, className = '' }: ThProps) {
+  const active = sort === col;
+  return (
+    <th
+      onClick={() => onSort(col)}
+      className={`text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide cursor-pointer select-none whitespace-nowrap ${active ? 'text-[#1E63B6]' : 'text-gray-400 hover:text-gray-600'} ${className}`}
+    >
+      <span className="flex items-center">
+        {label}
+        <SortIcon active={active} dir={dir} />
+      </span>
+    </th>
   );
 }
 
@@ -217,61 +256,27 @@ export default function Conformity() {
   // Filtres
   const [filterTeams,    setFilterTeams]    = useState<string[]>([]);
   const [filterRules,    setFilterRules]    = useState<string[]>([]);
-  const [filterSeverity, setFilterSeverity] = useState<string[]>([]);
+  const [filterStates,   setFilterStates]   = useState<string[]>([]);
+  const [filterTitle,    setFilterTitle]    = useState('');
+  const [filterVersion,  setFilterVersion]  = useState('');
+  const [filterFoundIn,  setFilterFoundIn]  = useState('');
+  const [filterBuild,    setFilterBuild]    = useState('');
 
-  // Synchronisation ADO
-  const [syncing, setSyncing]       = useState(false);
-  const [syncResult, setSyncResult] = useState<{ synced: number; lastSyncAt: string } | null>(null);
-  const [syncError, setSyncError]   = useState<string | null>(null);
+  // Tri
+  const [sort, setSort] = useState('changed_date');
+  const [dir,  setDir]  = useState<SortDir>('desc');
 
-  // Lancer l'évaluation
-  const [running, setRunning]     = useState(false);
-  const [runResult, setRunResult] = useState<RunResult | null>(null);
-  const [runError, setRunError]   = useState<string | null>(null);
+  // Synchronisation + évaluation combinées
+  type SyncEvalStep = 'idle' | 'syncing' | 'evaluating';
+  const [syncEvalStep, setSyncEvalStep] = useState<SyncEvalStep>('idle');
+  const [syncEvalResult, setSyncEvalResult] = useState<{
+    synced: number; lastSyncAt: string;
+    checkedBugs: number; newViolations: number; resolvedViolations: number;
+  } | null>(null);
+  const [syncEvalError, setSyncEvalError] = useState<string | null>(null);
 
   // Sélection multiple
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-
-  // Largeurs des colonnes (redimensionnables, persistées dans localStorage)
-  const COL_WIDTHS_KEY = 'qualipilot:conformity:colWidths';
-  const COL_WIDTHS_DEFAULT = { bug: 180, team: 90, priority: 64, version: 130, build: 110, rule: 160, severity: 100, date: 70 };
-
-  const [colWidths, setColWidths] = useState<typeof COL_WIDTHS_DEFAULT>(() => {
-    try {
-      const saved = localStorage.getItem(COL_WIDTHS_KEY);
-      if (saved) return { ...COL_WIDTHS_DEFAULT, ...JSON.parse(saved) };
-    } catch { /* ignore */ }
-    return COL_WIDTHS_DEFAULT;
-  });
-
-  useEffect(() => {
-    localStorage.setItem(COL_WIDTHS_KEY, JSON.stringify(colWidths));
-  }, [colWidths]);
-
-  function resetColWidths() {
-    setColWidths(COL_WIDTHS_DEFAULT);
-    localStorage.removeItem(COL_WIDTHS_KEY);
-  }
-
-  const resizingRef = useRef<{ key: keyof typeof colWidths; startX: number; startWidth: number } | null>(null);
-
-  function startResize(key: keyof typeof colWidths, e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    resizingRef.current = { key, startX: e.clientX, startWidth: colWidths[key] };
-    function onMove(ev: MouseEvent) {
-      if (!resizingRef.current) return;
-      const diff = ev.clientX - resizingRef.current.startX;
-      setColWidths(prev => ({ ...prev, [resizingRef.current!.key]: Math.max(48, resizingRef.current!.startWidth + diff) }));
-    }
-    function onUp() {
-      resizingRef.current = null;
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  }
 
   // Édition inline
   const [editState, setEditState]   = useState<EditState | null>(null);
@@ -294,10 +299,14 @@ export default function Conformity() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ page: String(p), limit: String(LIMIT) });
-      if (filterTeams.length)    params.set('team',      filterTeams.join(','));
-      if (filterRules.length)    params.set('rule_code', filterRules.join(','));
-      if (filterSeverity.length) params.set('severity',  filterSeverity.map(s => s === 'Erreur' ? 'error' : 'warning').join(','));
+      const params = new URLSearchParams({ page: String(p), limit: String(LIMIT), sort, dir });
+      if (filterTeams.length)   params.set('team',      filterTeams.join(','));
+      if (filterRules.length)   params.set('rule_code', filterRules.join(','));
+      if (filterStates.length)  params.set('state',     filterStates.join(','));
+      if (filterTitle)          params.set('title',     filterTitle);
+      if (filterVersion)        params.set('version',   filterVersion);
+      if (filterFoundIn)        params.set('found_in',  filterFoundIn);
+      if (filterBuild)          params.set('build',     filterBuild);
 
       const res = await fetch(`/api/conformity/violations?${params}`);
       if (!res.ok) throw new Error(`Erreur ${res.status}`);
@@ -310,7 +319,7 @@ export default function Conformity() {
     } finally {
       setLoading(false);
     }
-  }, [filterTeams, filterRules, filterSeverity]);
+  }, [filterTeams, filterRules, filterStates, filterTitle, filterVersion, filterFoundIn, filterBuild, sort, dir]);
 
   useEffect(() => { load(1); }, [load]);
 
@@ -322,42 +331,37 @@ export default function Conformity() {
     }
   }, [violations]);
 
-  async function handleSync() {
-    setSyncing(true);
-    setSyncResult(null);
-    setSyncError(null);
+  async function handleSyncAndEval() {
+    setSyncEvalStep('syncing');
+    setSyncEvalResult(null);
+    setSyncEvalError(null);
     try {
-      const res = await fetch('/api/sync', { method: 'POST' });
-      if (!res.ok) throw new Error(`Erreur ${res.status}`);
-      const result = await res.json();
-      setSyncResult(result);
+      const syncRes = await fetch('/api/sync', { method: 'POST' });
+      if (!syncRes.ok) throw new Error(`Erreur sync ${syncRes.status}`);
+      const syncData = await syncRes.json();
+
+      setSyncEvalStep('evaluating');
+      const evalRes = await fetch('/api/conformity/run', { method: 'POST' });
+      if (!evalRes.ok) throw new Error(`Erreur évaluation ${evalRes.status}`);
+      const evalData: RunResult = await evalRes.json();
+
+      setSyncEvalResult({ ...syncData, ...evalData });
       load(1);
     } catch (e) {
-      setSyncError(e instanceof Error ? e.message : 'Erreur inconnue');
+      setSyncEvalError(e instanceof Error ? e.message : 'Erreur inconnue');
     } finally {
-      setSyncing(false);
+      setSyncEvalStep('idle');
     }
   }
 
-  async function handleRun() {
-    setRunning(true);
-    setRunResult(null);
-    setRunError(null);
-    try {
-      const res = await fetch('/api/conformity/run', { method: 'POST' });
-      if (!res.ok) throw new Error(`Erreur ${res.status}`);
-      const result: RunResult = await res.json();
-      setRunResult(result);
-      load(1);
-    } catch (e) {
-      setRunError(e instanceof Error ? e.message : 'Erreur inconnue');
-    } finally {
-      setRunning(false);
-    }
+  function handleSort(col: string) {
+    if (sort === col) setDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSort(col); setDir('asc'); }
   }
 
   function resetFilters() {
-    setFilterTeams([]); setFilterRules([]); setFilterSeverity([]);
+    setFilterTeams([]); setFilterRules([]); setFilterStates([]);
+    setFilterTitle(''); setFilterVersion(''); setFilterFoundIn(''); setFilterBuild('');
   }
 
   // ─── Sélection ──────────────────────────────────────────────────────────────
@@ -453,85 +457,55 @@ export default function Conformity() {
 
   // ─── Dérivés ────────────────────────────────────────────────────────────────
 
-  const hasFilters  = filterTeams.length || filterRules.length || filterSeverity.length;
+  const hasFilters  = filterTeams.length || filterRules.length || filterStates.length || filterTitle || filterVersion || filterFoundIn || filterBuild;
   const totalPages  = Math.ceil(total / LIMIT);
-  const errorsCount = violations.filter(v => v.severity === 'error').length;
-  const warningsCount = violations.filter(v => v.severity === 'warning').length;
 
+  // Comptage par règle (sur la page courante)
+  const countByRule = violations.reduce<Record<string, number>>((acc, v) => {
+    acc[v.rule_code] = (acc[v.rule_code] ?? 0) + 1;
+    return acc;
+  }, {});
+  const rulesSorted = Object.entries(countByRule).sort((a, b) => b[1] - a[1]);
+
+  const busy = syncEvalStep !== 'idle';
   const headerActions = (
-    <div className="flex items-center gap-2">
-      {/* Synchroniser ADO */}
-      <button
-        onClick={handleSync}
-        disabled={syncing || running}
-        className={[
-          'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all border',
-          syncing
-            ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-wait'
-            : 'bg-white text-gray-600 border-gray-200 hover:border-[#1E63B6] hover:text-[#1E63B6] hover:bg-blue-50',
-        ].join(' ')}
-      >
-        <svg className={`w-4 h-4 shrink-0 ${syncing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-        </svg>
-        {syncing ? 'Synchronisation…' : 'Synchroniser'}
-      </button>
-
-      {/* Lancer l'évaluation */}
-      <button
-        onClick={handleRun}
-        disabled={running || syncing}
-        className={[
-          'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all',
-          running
-            ? 'bg-[#1E63B6]/60 cursor-wait'
-            : 'bg-[#1E63B6] hover:bg-[#0F3E8A] shadow-md shadow-[#1E63B6]/25',
-        ].join(' ')}
-      >
-        <RunIcon spinning={running} />
-        {running ? 'Évaluation…' : 'Lancer l\'évaluation'}
-      </button>
-    </div>
+    <button
+      onClick={handleSyncAndEval}
+      disabled={busy}
+      className={[
+        'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all',
+        busy ? 'bg-[#1E63B6]/60 cursor-wait' : 'bg-[#1E63B6] hover:bg-[#0F3E8A] shadow-md shadow-[#1E63B6]/25',
+      ].join(' ')}
+    >
+      <svg className={`w-4 h-4 shrink-0 ${syncEvalStep === 'syncing' ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+      </svg>
+      {syncEvalStep === 'syncing' ? 'Synchronisation…' : syncEvalStep === 'evaluating' ? 'Évaluation…' : 'Synchroniser et évaluer'}
+    </button>
   );
 
   return (
     <Layout title="Anomalies de conformité" actions={headerActions}>
 
-      {/* Résultat de la sync */}
-      {syncResult && (
-        <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-5 py-3 text-sm text-blue-700">
-          <svg className="w-4 h-4 shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-          </svg>
-          <span>Synchronisation terminée — <strong>{syncResult.synced}</strong> bugs importés depuis Azure DevOps.</span>
-          <button onClick={() => setSyncResult(null)} className="ml-auto text-blue-400 hover:text-blue-600 text-lg leading-none">×</button>
-        </div>
-      )}
-      {syncError && (
-        <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
-          <span>Erreur de synchronisation : {syncError}</span>
-          <button onClick={() => setSyncError(null)} className="ml-2 text-red-400 hover:text-red-600">×</button>
-        </div>
-      )}
-
-      {/* Résultat du run */}
-      {runResult && (
+      {/* Résultat sync + évaluation */}
+      {syncEvalResult && (
         <div className="mb-4 flex items-center gap-3 bg-green-50 border border-green-100 rounded-2xl px-5 py-3 text-sm text-green-700">
           <svg className="w-4 h-4 shrink-0 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
           </svg>
           <span>
-            Évaluation terminée — <strong>{runResult.checkedBugs}</strong> bugs analysés,{' '}
-            <strong className="text-red-600">{runResult.newViolations}</strong> nouvelles anomalies,{' '}
-            <strong className="text-green-600">{runResult.resolvedViolations}</strong> résolues.
+            <strong>{syncEvalResult.synced}</strong> bugs importés —{' '}
+            <strong>{syncEvalResult.checkedBugs}</strong> analysés,{' '}
+            <strong className="text-red-600">{syncEvalResult.newViolations}</strong> nouvelles anomalies,{' '}
+            <strong className="text-green-600">{syncEvalResult.resolvedViolations}</strong> résolues.
           </span>
-          <button onClick={() => setRunResult(null)} className="ml-auto text-green-400 hover:text-green-600 text-lg leading-none">×</button>
+          <button onClick={() => setSyncEvalResult(null)} className="ml-auto text-green-400 hover:text-green-600 text-lg leading-none">×</button>
         </div>
       )}
-      {runError && (
-        <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600">
-          Erreur lors de l'évaluation : {runError}
-          <button onClick={() => setRunError(null)} className="ml-2 text-red-400 hover:text-red-600">×</button>
+      {syncEvalError && (
+        <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
+          <span>Erreur : {syncEvalError}</span>
+          <button onClick={() => setSyncEvalError(null)} className="ml-2 text-red-400 hover:text-red-600">×</button>
         </div>
       )}
       {saveError && (
@@ -547,64 +521,65 @@ export default function Conformity() {
         </div>
       )}
 
-      {/* Compteurs */}
-      <div className="flex items-center gap-3 mb-5 flex-wrap">
-        <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-4 py-2">
-          <span className="w-2 h-2 rounded-full bg-red-500" />
-          <span className="text-sm font-semibold text-red-700">
-            {loading ? '…' : errorsCount} erreur{errorsCount !== 1 ? 's' : ''} (page)
-          </span>
-        </div>
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-4 py-2">
-          <span className="w-2 h-2 rounded-full bg-amber-400" />
-          <span className="text-sm font-semibold text-amber-700">
-            {loading ? '…' : warningsCount} avertissement{warningsCount !== 1 ? 's' : ''} (page)
-          </span>
-        </div>
+      {/* Compteurs par règle */}
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
+        {loading
+          ? <span className="text-sm text-gray-400">Chargement…</span>
+          : rulesSorted.length === 0
+            ? <span className="text-sm text-gray-400">Aucune anomalie</span>
+            : rulesSorted.map(([code, count]) => (
+                <button
+                  key={code}
+                  onClick={() => setFilterRules(prev => prev.includes(code) ? prev.filter(r => r !== code) : [...prev, code])}
+                  className={`flex items-center gap-2 rounded-xl px-3 py-1.5 border text-[11px] font-semibold transition-colors ${filterRules.includes(code) ? 'bg-[#1E63B6] text-white border-[#1E63B6]' : 'bg-white text-gray-700 border-gray-200 hover:border-[#1E63B6] hover:text-[#1E63B6]'}`}
+                  title={`Filtrer par règle ${code}`}
+                >
+                  <span className="font-mono">{code}</span>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${filterRules.includes(code) ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'}`}>{count}</span>
+                </button>
+              ))
+        }
         <span className="text-sm text-gray-400 font-mono ml-auto">{total.toLocaleString('fr-FR')} anomalie{total !== 1 ? 's' : ''} au total</span>
       </div>
 
       {/* Filtres */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4 space-y-3">
+        {/* Ligne 1 : multi-selects */}
         <div className="flex flex-wrap gap-3 items-center">
-          <MultiSelect
-            label="Équipes"
-            options={teams}
-            selected={filterTeams}
-            onChange={setFilterTeams}
-          />
-          <MultiSelect
-            label="Règles"
-            options={ALL_RULES}
-            selected={filterRules}
-            onChange={setFilterRules}
-          />
-          <MultiSelect
-            label="Sévérité"
-            options={['Erreur', 'Avertissement']}
-            selected={filterSeverity}
-            onChange={setFilterSeverity}
-            renderOption={opt => (
-              opt === 'Erreur'
-                ? <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-red-700"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />Erreur</span>
-                : <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-700"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Avertissement</span>
+          <MultiSelect label="Équipes" options={teams} selected={filterTeams} onChange={setFilterTeams} />
+          <MultiSelect label="États" options={['New', 'Active', 'Resolved', 'Closed']} selected={filterStates} onChange={setFilterStates}
+            renderOption={(opt: string) => (
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold ${STATE_STYLES[opt] ?? 'bg-gray-100 text-gray-600'}`}>{opt}</span>
             )}
           />
-          {hasFilters ? (
+          <MultiSelect label="Règles" options={ALL_RULES} selected={filterRules} onChange={setFilterRules} />
+          {hasFilters && (
             <button onClick={resetFilters} className="text-sm text-gray-400 hover:text-gray-600 underline underline-offset-2 ml-1">
               Tout réinitialiser
             </button>
-          ) : null}
-          <button
-            onClick={resetColWidths}
-            title="Remettre les colonnes à leur taille par défaut"
-            className="ml-auto flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-600 border border-gray-200 hover:border-gray-300 rounded-lg px-2.5 py-1.5 transition-colors"
-          >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
-            </svg>
-            Colonnes par défaut
-          </button>
+          )}
+        </div>
+        {/* Ligne 2 : champs texte contient */}
+        <div className="flex flex-wrap gap-3">
+          {([
+            { label: 'Titre contient',              value: filterTitle,   set: setFilterTitle },
+            { label: 'Version souhaitée contient',  value: filterVersion, set: setFilterVersion },
+            { label: 'Trouvé dans contient',        value: filterFoundIn, set: setFilterFoundIn },
+            { label: 'Build contient',              value: filterBuild,   set: setFilterBuild },
+          ] as { label: string; value: string; set: (v: string) => void }[]).map(({ label, value, set }) => (
+            <div key={label} className="relative">
+              <input
+                type="text"
+                placeholder={label}
+                value={value}
+                onChange={e => set(e.target.value)}
+                className="text-sm border border-gray-200 rounded-lg pl-3 pr-7 py-2 bg-white text-[#2B2B2B] placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#66D2DB]/40 w-52"
+              />
+              {value && (
+                <button onClick={() => set('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-lg leading-none">×</button>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -614,11 +589,11 @@ export default function Conformity() {
 
         {!error && (
           <div className="overflow-x-auto">
-            <table className="text-sm" style={{ tableLayout: 'fixed', width: colWidths.bug + colWidths.team + colWidths.priority + colWidths.version + colWidths.build + colWidths.rule + colWidths.severity + colWidths.date + 28 + 24 }}>
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/60">
                   {/* Checkbox all */}
-                  <th className="px-3 py-3" style={{ width: 28 }}>
+                  <th className="px-4 py-3 w-8">
                     <input
                       type="checkbox"
                       checked={allSelected}
@@ -627,43 +602,25 @@ export default function Conformity() {
                       className="rounded border-gray-300 text-[#1E63B6] focus:ring-[#1E63B6]/30 cursor-pointer"
                     />
                   </th>
-                  {(
-                    [
-                      { key: 'bug',      label: 'Bug'      },
-                      { key: 'team',     label: 'Équipe'   },
-                      { key: 'priority', label: 'Prio'     },
-                      { key: 'version',  label: 'Version'  },
-                      { key: 'build',    label: 'Build'    },
-                      { key: 'rule',     label: 'Règle'    },
-                      { key: 'severity', label: 'Sévérité' },
-                      { key: 'date',     label: 'Détecté'  },
-                    ] as { key: keyof typeof colWidths; label: string }[]
-                  ).map(col => (
-                    <th
-                      key={col.key}
-                      style={{ width: colWidths[col.key] }}
-                      className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400 relative select-none overflow-hidden"
-                    >
-                      <span className="truncate block pr-2">{col.label}</span>
-                      {/* Resize handle */}
-                      <div
-                        onMouseDown={e => startResize(col.key, e)}
-                        className="absolute right-0 top-0 h-full w-2 cursor-col-resize flex items-center justify-center group/rh"
-                      >
-                        <div className="w-px h-3/4 bg-gray-200 group-hover/rh:bg-[#1E63B6] group-hover/rh:w-0.5 transition-all" />
-                      </div>
-                    </th>
-                  ))}
-                  <th style={{ width: 24 }} />
+                  <Th col="bug_id"            label="ID"               sort={sort} dir={dir} onSort={handleSort} />
+                  <Th col="title"             label="Titre"            sort={sort} dir={dir} onSort={handleSort} className="min-w-[200px]" />
+                  <Th col="state"             label="État"             sort={sort} dir={dir} onSort={handleSort} />
+                  <Th col="team"              label="Équipe"           sort={sort} dir={dir} onSort={handleSort} />
+                  <Th col="priority"          label="Prio"             sort={sort} dir={dir} onSort={handleSort} />
+                  <Th col="found_in"          label="Trouvé dans"      sort={sort} dir={dir} onSort={handleSort} />
+                  <Th col="version_souhaitee" label="Version souhaitée" sort={sort} dir={dir} onSort={handleSort} />
+                  <Th col="integration_build" label="Build"            sort={sort} dir={dir} onSort={handleSort} />
+                  <Th col="changed_date"      label="Modifié"          sort={sort} dir={dir} onSort={handleSort} />
+                  <th className="w-6" />
                 </tr>
               </thead>
               <tbody>
                 {loading && (
-                  <tr><td colSpan={10} className="px-5 py-10 text-center text-gray-400 text-sm">Chargement…</td></tr>
+                  <tr><td colSpan={11} className="px-4 py-10 text-center text-gray-400 text-sm">Chargement…</td></tr>
                 )}
                 {!loading && violations.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-5 py-16 text-center">
+                    <td colSpan={11} className="px-4 py-16 text-center">
                       <div className="text-4xl mb-3">✓</div>
                       <div className="text-sm font-semibold text-green-700 mb-1">Aucune anomalie</div>
                       <div className="text-xs text-gray-400">
@@ -683,10 +640,10 @@ export default function Conformity() {
                     <tr
                       key={v.id}
                       onClick={() => !isEditing && navigate(`/conformity/${v.bug_id}`)}
-                      className={`border-b border-gray-50 group transition-colors ${isEditing ? '' : 'cursor-pointer'} ${isSelected ? 'bg-blue-50/50' : 'hover:bg-[#66D2DB]/8'}`}
+                      className={`border-b border-gray-50 group transition-colors ${isEditing ? '' : 'cursor-pointer'} ${isSelected ? 'bg-blue-50/50' : 'hover:bg-[#66D2DB]/5'}`}
                     >
                       {/* Checkbox */}
-                      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -695,30 +652,33 @@ export default function Conformity() {
                         />
                       </td>
 
-                      {/* Bug */}
-                      <td className="px-3 py-2.5">
-                        <div className="font-mono text-[11px] font-semibold text-[#1E63B6]">
-                          <a
-                            href={`https://dev.azure.com/Isagri-Prod-Progiciels/Isagri_Dev_GC_GestionCommerciale/_workitems/edit/${v.bug_id}`}
-                            target="_blank" rel="noopener noreferrer"
-                            className="hover:underline"
-                            onClick={e => e.stopPropagation()}
-                          >
-                            #{v.bug_id}
-                          </a>
-                        </div>
-                        <div className="text-[12px] font-semibold text-[#2B2B2B] line-clamp-1 leading-snug mt-0.5 truncate" title={v.bug_title ?? undefined}>{v.bug_title ?? ''}</div>
+                      {/* ID */}
+                      <td className="px-4 py-3 font-mono text-[12px] text-[#1E63B6] font-semibold whitespace-nowrap">
+                        <a
+                          href={`https://dev.azure.com/Isagri-Prod-Progiciels/Isagri_Dev_GC_GestionCommerciale/_workitems/edit/${v.bug_id}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="hover:underline"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          #{v.bug_id}
+                        </a>
+                      </td>
+
+                      {/* Titre */}
+                      <td className="px-4 py-3 text-[#2B2B2B] max-w-[300px]">
+                        <span className="line-clamp-2 leading-snug" title={v.bug_title ?? undefined}>{v.bug_title ?? ''}</span>
+                      </td>
+
+                      {/* État */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {v.bug_state && <StateBadge state={v.bug_state} />}
                       </td>
 
                       {/* Équipe */}
-                      <td className="px-3 py-2.5">
-                        <span className="text-[10px] font-mono font-semibold text-gray-600 bg-gray-100 rounded-lg px-2 py-0.5 whitespace-nowrap">
-                          {v.bug_team ?? ''}
-                        </span>
-                      </td>
+                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap text-[12px]">{v.bug_team ?? ''}</td>
 
-                      {/* Priorité — éditable */}
-                      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                      {/* Prio — éditable */}
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <EditableCell
                           bugId={v.bug_id}
                           field="priority"
@@ -732,8 +692,11 @@ export default function Conformity() {
                         />
                       </td>
 
+                      {/* Trouvé dans */}
+                      <td className="px-4 py-3 font-mono text-[12px] text-gray-500 whitespace-nowrap">{v.bug_found_in ?? ''}</td>
+
                       {/* Version souhaitée — éditable */}
-                      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <EditableCell
                           bugId={v.bug_id}
                           field="version_souhaitee"
@@ -748,7 +711,7 @@ export default function Conformity() {
                       </td>
 
                       {/* Build — éditable */}
-                      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <EditableCell
                           bugId={v.bug_id}
                           field="integration_build"
@@ -762,26 +725,11 @@ export default function Conformity() {
                         />
                       </td>
 
-                      {/* Règle */}
-                      <td className="px-3 py-2.5">
-                        <div className="text-[10px] font-mono text-[#1E63B6] bg-blue-50 rounded-lg px-2 py-0.5 whitespace-nowrap inline-block max-w-[150px] truncate" title={v.rule_code}>
-                          {v.rule_code}
-                        </div>
-                        <div className="text-[10px] text-gray-400 mt-0.5 line-clamp-1">{v.rule_description}</div>
-                      </td>
+                      {/* Modifié */}
+                      <td className="px-4 py-3 text-[12px] text-gray-400 whitespace-nowrap">{dateShort(v.bug_changed_date)}</td>
 
-                      {/* Sévérité */}
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <SeverityBadge severity={v.severity} />
-                      </td>
-
-                      {/* Détecté */}
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <span className="text-[11px] text-gray-400 font-mono">{dateShort(v.detected_at)}</span>
-                      </td>
-
-                      {/* Détail — toujours visible */}
-                      <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
+                      {/* Détail */}
+                      <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                         <Link
                           to={`/conformity/${v.bug_id}`}
                           className="text-xs font-bold text-[#1E63B6] hover:text-[#0F3E8A] opacity-0 group-hover:opacity-100 transition-opacity"
@@ -799,7 +747,7 @@ export default function Conformity() {
         )}
 
         {totalPages > 1 && !loading && (
-          <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
+          <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
             <span className="text-[12px] text-gray-400">
               Page {page} / {totalPages} — {total.toLocaleString('fr-FR')} anomalies
             </span>
@@ -834,7 +782,7 @@ export default function Conformity() {
           <select
             value={bulkField}
             onChange={e => { setBulkField(e.target.value as WritableField); setBulkValue(e.target.value === 'priority' ? '2' : ''); }}
-            className="bg-white/10 border border-white/20 rounded-xl text-sm px-3 py-1.5 text-white focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 shrink-0"
+            className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 shrink-0"
           >
             <option value="priority">Priorité</option>
             <option value="version_souhaitee">Version souhaitée</option>
@@ -846,7 +794,7 @@ export default function Conformity() {
             <select
               value={bulkValue}
               onChange={e => setBulkValue(e.target.value)}
-              className="bg-white/10 border border-white/20 rounded-xl text-sm px-3 py-1.5 text-white focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 w-20 shrink-0"
+              className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 w-20 shrink-0"
             >
               <option value="1">1</option>
               <option value="2">2</option>
@@ -859,7 +807,7 @@ export default function Conformity() {
               value={bulkValue}
               onChange={e => setBulkValue(e.target.value)}
               placeholder="Nouvelle valeur…"
-              className="bg-white/10 border border-white/20 rounded-xl text-sm px-3 py-1.5 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 flex-1 min-w-0"
+              className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 flex-1 min-w-0"
             />
           )}
 

@@ -14,15 +14,36 @@ router.post('/conformity/run', (_req, res) => {
   }
 });
 
+const VIOLATION_SORTABLE: Record<string, string> = {
+  bug_id:            'v.bug_id',
+  team:              'b.team',
+  state:             'b.state',
+  priority:          'b.priority',
+  version_souhaitee: 'b.version_souhaitee',
+  integration_build: 'b.integration_build',
+  rule_code:         'r.code',
+  detected_at:       'v.detected_at',
+  changed_date:      'b.changed_date',
+};
+
 // GET /api/conformity/violations
 router.get('/conformity/violations', (req, res) => {
   const db = getDb();
 
   const teams     = typeof req.query.team      === 'string' && req.query.team      ? req.query.team.split(',').filter(Boolean)      : [];
   const codes     = typeof req.query.rule_code === 'string' && req.query.rule_code ? req.query.rule_code.split(',').filter(Boolean) : [];
-  const severities= typeof req.query.severity  === 'string' && req.query.severity  ? req.query.severity.split(',').filter(Boolean)  : [];
+  const states    = typeof req.query.state     === 'string' && req.query.state     ? req.query.state.split(',').filter(Boolean)     : [];
   const bugIdRaw  = typeof req.query.bug_id    === 'string' && req.query.bug_id    ? parseInt(req.query.bug_id, 10)                 : null;
   const bugId     = bugIdRaw !== null && !isNaN(bugIdRaw) ? bugIdRaw : null;
+
+  const titleContains   = typeof req.query.title    === 'string' ? req.query.title.trim()    : null;
+  const versionContains = typeof req.query.version  === 'string' ? req.query.version.trim()  : null;
+  const foundInContains = typeof req.query.found_in === 'string' ? req.query.found_in.trim() : null;
+  const buildContains   = typeof req.query.build    === 'string' ? req.query.build.trim()    : null;
+
+  const sortRaw = typeof req.query.sort === 'string' ? req.query.sort : 'detected_at';
+  const sortCol = VIOLATION_SORTABLE[sortRaw] ?? 'v.detected_at';
+  const dir     = req.query.dir === 'asc' ? 'ASC' : 'DESC';
 
   const page   = Math.max(1, parseInt(String(req.query.page  ?? '1'),  10) || 1);
   const limit  = Math.min(200, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10) || 50));
@@ -33,12 +54,17 @@ router.get('/conformity/violations', (req, res) => {
 
   if (bugId !== null) { conditions.push('v.bug_id = ?'); params.push(bugId); }
 
-  if (teams.length === 1)      { conditions.push('b.team = ?');                                       params.push(teams[0]); }
-  else if (teams.length > 1)   { conditions.push(`b.team IN (${teams.map(() => '?').join(',')})`);    params.push(...teams); }
-  if (codes.length === 1)      { conditions.push('r.code = ?');                                       params.push(codes[0]); }
-  else if (codes.length > 1)   { conditions.push(`r.code IN (${codes.map(() => '?').join(',')})`);    params.push(...codes); }
-  if (severities.length === 1) { conditions.push('r.severity = ?');                                   params.push(severities[0]); }
-  else if (severities.length > 1){ conditions.push(`r.severity IN (${severities.map(() => '?').join(',')})`); params.push(...severities); }
+  if (teams.length === 1)  { conditions.push('b.team = ?');                                     params.push(teams[0]); }
+  else if (teams.length > 1){ conditions.push(`b.team IN (${teams.map(() => '?').join(',')})`); params.push(...teams); }
+  if (codes.length === 1)  { conditions.push('r.code = ?');                                     params.push(codes[0]); }
+  else if (codes.length > 1){ conditions.push(`r.code IN (${codes.map(() => '?').join(',')})`); params.push(...codes); }
+  if (states.length === 1)  { conditions.push('b.state = ?');                                     params.push(states[0]); }
+  else if (states.length > 1){ conditions.push(`b.state IN (${states.map(() => '?').join(',')})`); params.push(...states); }
+
+  if (titleContains)   { conditions.push('b.title LIKE ?');             params.push(`%${titleContains}%`); }
+  if (versionContains) { conditions.push('b.version_souhaitee LIKE ?'); params.push(`%${versionContains}%`); }
+  if (foundInContains) { conditions.push('b.found_in LIKE ?');          params.push(`%${foundInContains}%`); }
+  if (buildContains)   { conditions.push('b.integration_build LIKE ?'); params.push(`%${buildContains}%`); }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
 
@@ -59,17 +85,18 @@ router.get('/conformity/violations', (req, res) => {
       b.version_souhaitee AS bug_version_souhaitee,
       b.integration_build AS bug_integration_build,
       b.found_in AS bug_found_in,
+      b.changed_date AS bug_changed_date,
       b.area_path AS bug_area_path,
       r.code AS rule_code, r.description AS rule_description, r.severity
     FROM conformity_violations v
     JOIN bugs_cache b ON b.id = v.bug_id
     JOIN conformity_rules r ON r.id = v.rule_id
     ${where}
-    ORDER BY v.detected_at DESC
+    ORDER BY ${sortCol} ${dir}
     LIMIT ? OFFSET ?
   `).all(...params, limit, offset);
 
-  res.json({ total, page, limit, violations });
+  res.json({ total, page, limit, sort: sortRaw, dir: dir.toLowerCase(), violations });
 });
 
 // GET /api/conformity/summary
