@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \":*)",
+      "Bash(curl -s \"http://localhost:3001/api/bugs?limit=2\")",
+      "Bash(python -m json.tool)",
+      "Bash(npm --prefix backend run test)",
+      "Bash(npm --prefix backend run test -- --reporter=verbose)",
+      "Bash(node -e \"require\\(''./src/routes/health''\\)\")",
+      "Bash(npx vitest:*)",
+      "Bash(curl -s http://localhost:3001/api/health)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(ls /c/_git/QualiPilot/*.db)",
+      "Bash(ls /c/_git/QualiPilot/backend/*.db)"
+    ]
+  }
+}

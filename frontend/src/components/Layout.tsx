@@ -11,6 +11,14 @@ function HomeIcon({ className }: { className?: string }) {
   );
 }
 
+function BugIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 12.75c1.148 0 2.278.08 3.383.237 1.037.146 1.866.966 1.866 2.013 0 3.728-2.35 6.75-5.25 6.75S6.75 18.728 6.75 15c0-1.046.83-1.867 1.866-2.013A24.204 24.204 0 0112 12.75zm0 0c2.883 0 5.647.508 8.207 1.44a23.91 23.91 0 01-1.152 6.06M12 12.75c-2.883 0-5.647.508-8.208 1.44a23.916 23.916 0 001.152 6.06M12 12.75a2.25 2.25 0 002.248-2.354M12 12.75a2.25 2.25 0 01-2.248-2.354M12 8.25c.995 0 1.971-.08 2.922-.236.403-.066.74-.358.795-.762a3.778 3.778 0 00-.399-2.25M12 8.25c-.995 0-1.97-.08-2.922-.236-.402-.066-.74-.358-.795-.762a3.778 3.778 0 01.4-2.25m0 0a5.002 5.002 0 019.45 0m-9.45 0A5.002 5.002 0 012.55 5.764" />
+    </svg>
+  );
+}
+
 function AlertIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -48,6 +56,7 @@ function CogIcon({ className }: { className?: string }) {
 
 const NAV_ITEMS = [
   { path: '/',           icon: HomeIcon,  label: 'Tableau de bord', exact: true },
+  { path: '/bugs',       icon: BugIcon,   label: 'Bugs',             exact: false },
   { path: '/conformity', icon: AlertIcon, label: 'Anomalies',        exact: false },
   { path: '/kpis',       icon: ChartIcon, label: 'KPIs',             exact: false },
   { path: '/history',    icon: ClockIcon, label: 'Historique',       exact: false },

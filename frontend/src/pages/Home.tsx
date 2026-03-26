@@ -53,17 +53,28 @@ function KpiCard({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function Home() {
-  const [syncing, setSyncing] = useState(false);
-  const [lastSync] = useState('23/03/2026 — 09:30');
+  const [syncing,    setSyncing]    = useState(false);
+  const [syncResult, setSyncResult] = useState<{ synced: number; lastSyncAt: string } | null>(null);
+  const [syncError,  setSyncError]  = useState<string | null>(null);
 
   const totalBugs    = TEAMS.reduce((s, t) => s + t.bugs, 0);
   const totalErrors  = TEAMS.reduce((s, t) => s + (t.status === 'error'   ? t.anomalies : 0), 0);
   const totalWarning = TEAMS.reduce((s, t) => s + (t.status === 'warning' ? t.anomalies : 0), 0);
 
-  const handleSync = () => {
+  async function handleSync() {
     setSyncing(true);
-    setTimeout(() => setSyncing(false), 2200);
-  };
+    setSyncResult(null);
+    setSyncError(null);
+    try {
+      const res = await fetch('/api/sync', { method: 'POST' });
+      if (!res.ok) throw new Error(`Erreur ${res.status}`);
+      setSyncResult(await res.json());
+    } catch (e) {
+      setSyncError(e instanceof Error ? e.message : 'Erreur inconnue');
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   const syncBtn = (
     <button
@@ -93,8 +104,24 @@ export function Home() {
         <span className="text-sm text-blue-700 font-medium">Sprint actif :</span>
         <span className="text-sm font-mono font-bold text-blue-900">PI5-SP3</span>
         <span className="mx-1 text-blue-200">|</span>
-        <span className="text-sm text-blue-500">Sync : {lastSync}</span>
+        <span className="text-sm text-blue-500">
+          {syncResult ? `Sync : ${new Date(syncResult.lastSyncAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : 'Sync : —'}
+        </span>
       </div>
+
+      {syncResult && (
+        <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-5 py-3 text-sm text-blue-700">
+          <SyncIcon spinning={false} />
+          <span>Synchronisation terminée — <strong>{syncResult.synced}</strong> bugs importés depuis Azure DevOps.</span>
+          <button onClick={() => setSyncResult(null)} className="ml-auto text-blue-400 hover:text-blue-600 text-lg leading-none">×</button>
+        </div>
+      )}
+      {syncError && (
+        <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
+          <span>Erreur de synchronisation : {syncError}</span>
+          <button onClick={() => setSyncError(null)} className="ml-2 text-red-400 hover:text-red-600">×</button>
+        </div>
+      )}
 
       {/* KPI cards */}
       <div className="grid grid-cols-4 gap-4 mb-7">

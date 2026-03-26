@@ -1,16 +1,16 @@
 import { Router } from 'express';
 import healthRouter from './health';
-
-// ─── CHAQUE PERSONNE AJOUTE SON IMPORT + SA LIGNE ICI ────────────────────────
-// import featureARouter from './featureA';
-// ─────────────────────────────────────────────────────────────────────────────
+import syncRouter from './sync';
+import bugsRouter from './bugs';
+import conformityRouter from './conformity';
+import writeRouter from './write';
 
 const router = Router();
 
 router.use('/', healthRouter);
-
-// ─── CHAQUE PERSONNE AJOUTE SA ROUTE ICI ─────────────────────────────────────
-// router.use('/', featureARouter);
-// ─────────────────────────────────────────────────────────────────────────────
+router.use('/', syncRouter);
+router.use('/', bugsRouter);
+router.use('/', conformityRouter);
+router.use('/', writeRouter);
 
 export default router;

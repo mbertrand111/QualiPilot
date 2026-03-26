@@ -22,7 +22,12 @@
       "Bash(mv Livrable/package.json .)",
       "Bash(mv Livrable/package-lock.json .)",
       "Bash(mv Livrable/scripts .)",
-      "Bash(find c:/_git/QualiPilot -not -path */node_modules/* -not -path */.git/* -type d)"
+      "Bash(find c:/_git/QualiPilot -not -path */node_modules/* -not -path */.git/* -type d)",
+      "Bash(npm install:*)",
+      "Bash(npm test:*)",
+      "Bash(curl -s -X POST http://localhost:3001/api/sync)",
+      "Bash(npx kill-port:*)",
+      "Bash(node -e \":*)"
     ]
   }
 }

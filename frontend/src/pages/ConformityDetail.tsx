@@ -1,45 +1,82 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Layout } from '../components/Layout';
+import { ConfirmModal } from '../components/ConfirmModal';
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const MOCK_BUG = {
-  id: 15234,
-  title: 'Crash au démarrage sur FAH_26.20',
-  state: 'Active',
-  priority: 3,
-  team: 'PIXELS',
-  filiere: 'GC',
-  areaPath: 'Isagri_Dev_GC_GestionCommerciale\\PIXELS',
-  iterationPath: 'Isagri_Dev_GC_GestionCommerciale\\2025-2026\\PI5\\PI5-SP3',
-  foundIn: 'FAH_26.19',
-  integrationBuild: '',
-  versionSouhaitee: 'FAH_26.20',
-  resolvedReason: '',
-  assignedTo: 'Jean Dupont',
-  createdDate: '15/02/2026',
-  resolvedDate: '—',
-  changedDate: '20/03/2026',
-};
+interface Bug {
+  id: number;
+  title: string | null;
+  state: string | null;
+  priority: number | null;
+  team: string | null;
+  filiere: string | null;
+  area_path: string | null;
+  iteration_path: string | null;
+  sprint: string | null;
+  sprint_done: string | null;
+  found_in: string | null;
+  integration_build: string | null;
+  version_souhaitee: string | null;
+  resolved_reason: string | null;
+  raison_origine: string | null;
+  assigned_to: string | null;
+  created_date: string | null;
+  resolved_date: string | null;
+  changed_date: string | null;
+  last_synced_at: string | null;
+}
 
-const MOCK_VIOLATIONS = [
-  {
-    rule: 'PRIORITY_CHECK',
-    severity: 'error' as const,
-    description: 'La priorité est 3 — elle doit être 2 pour tous les bugs actifs.',
-  },
-];
+interface Violation {
+  id: number;
+  rule_code: string;
+  rule_description: string;
+  severity: 'error' | 'warning';
+  detected_at: string;
+}
 
-const MOCK_AUDIT = [
-  { date: '22/03/2026 14:30', field: 'Priority', oldValue: '2', newValue: '3', user: 'QM' },
-];
+interface AuditEntry {
+  id: number;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  performed_at: string;
+}
 
-const WHITELIST = [
-  { key: 'priority',        label: 'Priorité',            initialValue: '3',         type: 'select' as const, options: ['1', '2', '3', '4'] },
-  { key: 'integrationBuild', label: 'Integration Build',  initialValue: '',          type: 'text'   as const },
-  { key: 'versionSouhaitee', label: 'Version souhaitée GC', initialValue: 'FAH_26.20', type: 'text' as const },
-];
+interface ConfirmState {
+  field: 'priority' | 'version_souhaitee' | 'integration_build';
+  label: string;
+  oldValue: string;
+  newValue: string;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmt(v: string | null | undefined): string {
+  return v?.trim() ? v.trim() : '—';
+}
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleDateString('fr-FR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function fmtDateShort(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  } catch {
+    return iso;
+  }
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -54,56 +91,138 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-interface ConfirmState {
-  fieldKey: string;
-  label: string;
-  oldValue: string;
-  newValue: string;
-}
-
-interface Toast {
-  type: 'success' | 'error';
-  message: string;
-}
+const EDITABLE_FIELDS = [
+  { key: 'priority'          as const, label: 'Priorité',              type: 'select' as const, options: ['1', '2', '3', '4'] },
+  { key: 'integration_build' as const, label: 'Integration Build',     type: 'text'   as const },
+  { key: 'version_souhaitee' as const, label: 'Version souhaitée GC',  type: 'text'   as const },
+];
 
 export default function ConformityDetail() {
   const { bugId } = useParams<{ bugId: string }>();
-  const bug = MOCK_BUG; // in prod: fetch by bugId
 
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>(
-    Object.fromEntries(WHITELIST.map(f => [f.key, f.initialValue]))
-  );
-  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
-  const [toast, setToast]     = useState<Toast | null>(null);
-  const [saving, setSaving]   = useState(false);
+  const [bug, setBug]               = useState<Bug | null>(null);
+  const [violations, setViolations] = useState<Violation[]>([]);
+  const [audit, setAudit]           = useState<AuditEntry[]>([]);
+  const [loadingBug, setLoadingBug] = useState(true);
+  const [bugError, setBugError]     = useState<string | null>(null);
 
-  const showToast = (type: Toast['type'], message: string) => {
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 3500);
-  };
+  // Valeurs dans le formulaire de correction
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
 
-  const handleApply = (field: typeof WHITELIST[0]) => {
+  // Confirmation modale
+  const [confirm, setConfirm]   = useState<ConfirmState | null>(null);
+  const [saving, setSaving]     = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // ─── Chargement initial ────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!bugId) return;
+    const id = parseInt(bugId, 10);
+    if (isNaN(id)) { setBugError('ID de bug invalide'); setLoadingBug(false); return; }
+
+    Promise.all([
+      fetch(`/api/bugs/${id}`).then(r => r.json()),
+      fetch(`/api/conformity/violations?bug_id=${id}&limit=50`).then(r => r.json()),
+      fetch(`/api/bugs/${id}/audit`).then(r => r.json()),
+    ]).then(([bugData, violationsData, auditData]) => {
+      if (bugData.error) { setBugError(bugData.error); return; }
+      setBug(bugData as Bug);
+      setViolations((violationsData.violations ?? []) as Violation[]);
+      setAudit((Array.isArray(auditData) ? auditData : []) as AuditEntry[]);
+      setFieldValues({
+        priority:          String(bugData.priority ?? ''),
+        integration_build: bugData.integration_build ?? '',
+        version_souhaitee: bugData.version_souhaitee ?? '',
+      });
+    }).catch(e => {
+      setBugError(e instanceof Error ? e.message : 'Erreur de chargement');
+    }).finally(() => setLoadingBug(false));
+  }, [bugId]);
+
+  // ─── Rechargement après écriture ──────────────────────────────────────────
+
+  function reload() {
+    if (!bugId) return;
+    const id = parseInt(bugId, 10);
+    Promise.all([
+      fetch(`/api/bugs/${id}`).then(r => r.json()),
+      fetch(`/api/conformity/violations?bug_id=${id}&limit=50`).then(r => r.json()),
+      fetch(`/api/bugs/${id}/audit`).then(r => r.json()),
+    ]).then(([bugData, violationsData, auditData]) => {
+      if (bugData.error) return;
+      setBug(bugData as Bug);
+      setViolations((violationsData.violations ?? []) as Violation[]);
+      setAudit((Array.isArray(auditData) ? auditData : []) as AuditEntry[]);
+      setFieldValues({
+        priority:          String(bugData.priority ?? ''),
+        integration_build: bugData.integration_build ?? '',
+        version_souhaitee: bugData.version_souhaitee ?? '',
+      });
+    }).catch(() => {});
+  }
+
+  // ─── Soumission d'une modification ────────────────────────────────────────
+
+  function handleApply(field: ConfirmState['field'], label: string) {
+    if (!bug) return;
+    const currentRaw = field === 'priority'
+      ? String(bug.priority ?? '')
+      : field === 'integration_build' ? (bug.integration_build ?? '') : (bug.version_souhaitee ?? '');
     setConfirm({
-      fieldKey:  field.key,
-      label:     field.label,
-      oldValue:  field.initialValue,
-      newValue:  fieldValues[field.key],
+      field,
+      label,
+      oldValue: currentRaw,
+      newValue: fieldValues[field] ?? '',
     });
-  };
+    setSaveError(null);
+  }
 
-  const handleConfirm = () => {
-    if (!confirm) return;
+  async function handleConfirm() {
+    if (!confirm || !bug) return;
     setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
+    try {
+      const value = confirm.field === 'priority'
+        ? parseInt(confirm.newValue, 10)
+        : confirm.newValue;
+      const res = await fetch(`/api/bugs/${bug.id}/fields`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field: confirm.field, value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Erreur ${res.status}`);
       setConfirm(null);
-      showToast('success', `Champ "${confirm.label}" modifié avec succès dans Azure DevOps.`);
-    }, 1600);
-  };
+      reload();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Erreur inconnue');
+      setConfirm(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ─── Rendu ────────────────────────────────────────────────────────────────
+
+  if (loadingBug) {
+    return (
+      <Layout title={`Bug #${bugId}`} actions={<Link to="/conformity" className="text-sm text-gray-500 hover:text-gray-700 font-medium">← Retour</Link>}>
+        <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Chargement…</div>
+      </Layout>
+    );
+  }
+
+  if (bugError || !bug) {
+    return (
+      <Layout title={`Bug #${bugId}`} actions={<Link to="/conformity" className="text-sm text-gray-500 hover:text-gray-700 font-medium">← Retour</Link>}>
+        <div className="bg-red-50 border border-red-100 rounded-2xl px-5 py-4 text-sm text-red-600">{bugError ?? 'Bug introuvable'}</div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout
-      title={`Bug #${bugId ?? bug.id}`}
+      title={`Bug #${bug.id}`}
       actions={
         <Link to="/conformity" className="text-sm text-gray-500 hover:text-gray-700 font-medium">
           ← Retour aux anomalies
@@ -111,58 +230,10 @@ export default function ConformityDetail() {
       }
     >
 
-      {/* Toast notification */}
-      {toast && (
-        <div className={[
-          'fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-xl text-sm font-semibold',
-          toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white',
-        ].join(' ')}>
-          <span>{toast.type === 'success' ? '✓' : '✕'}</span>
-          {toast.message}
-        </div>
-      )}
-
-      {/* Confirmation modal */}
-      {confirm && (
-        <div className="fixed inset-0 bg-[#0e1a38]/55 flex items-center justify-center z-40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 fade-up">
-            <div className="flex items-start gap-4 mb-5">
-              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0 text-amber-600 text-xl">⚠</div>
-              <div>
-                <h3 className="text-[15px] font-bold text-[#0e1a38] mb-1">Confirmer la modification</h3>
-                <p className="text-sm text-gray-500">
-                  Vous allez modifier le champ <strong className="text-gray-700">{confirm.label}</strong> du bug{' '}
-                  <strong className="font-mono text-gray-700">#{bug.id}</strong> directement dans Azure DevOps.
-                  Cette action est tracée dans l'audit log.
-                </p>
-              </div>
-            </div>
-            <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 space-y-2 border border-gray-100">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Valeur actuelle</span>
-                <span className="font-mono font-semibold text-red-600">{confirm.oldValue || '(vide)'}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Nouvelle valeur</span>
-                <span className="font-mono font-semibold text-green-600">{confirm.newValue}</span>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setConfirm(null)}
-                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleConfirm}
-                disabled={saving}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:bg-blue-300"
-              >
-                {saving ? 'Application…' : 'Confirmer dans ADO'}
-              </button>
-            </div>
-          </div>
+      {saveError && (
+        <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
+          <span>Erreur : {saveError}</span>
+          <button onClick={() => setSaveError(null)} className="text-red-400 hover:text-red-600">×</button>
         </div>
       )}
 
@@ -171,87 +242,109 @@ export default function ConformityDetail() {
         {/* ── Left column ── */}
         <div className="col-span-2 space-y-5">
 
-          {/* Bug header card */}
-          <div className="fade-up bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          {/* Bug header */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <div className="mb-5">
               <span className="font-mono text-xs font-semibold text-gray-400">#{bug.id}</span>
-              <h2 className="text-[17px] font-bold text-[#0e1a38] mt-1">{bug.title}</h2>
+              <h2 className="text-[17px] font-bold text-[#0e1a38] mt-1">{bug.title ?? '—'}</h2>
               <div className="flex items-center flex-wrap gap-2 mt-3">
-                <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full">{bug.state}</span>
-                <span className="text-xs font-semibold bg-red-100 text-red-700 px-2.5 py-1 rounded-full">Priorité {bug.priority}</span>
-                <span className="text-xs font-mono font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">{bug.team}</span>
-                <span className="text-xs font-semibold text-gray-500 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">{bug.filiere}</span>
+                {bug.state && (
+                  <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full">{bug.state}</span>
+                )}
+                {bug.priority !== null && (
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${bug.priority !== 2 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                    Priorité {bug.priority}
+                  </span>
+                )}
+                {bug.team && (
+                  <span className="text-xs font-mono font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">{bug.team}</span>
+                )}
+                {bug.sprint && (
+                  <span className="text-xs font-semibold text-gray-500 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">{bug.sprint}</span>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-x-8">
-              <InfoRow label="Assigned To"      value={bug.assignedTo}    />
-              <InfoRow label="Found In"          value={bug.foundIn}       />
-              <InfoRow label="Integration Build" value={bug.integrationBuild} />
-              <InfoRow label="Version souhaitée" value={bug.versionSouhaitee} />
-              <InfoRow label="Resolved Reason"   value={bug.resolvedReason}   />
-              <InfoRow label="Créé le"           value={bug.createdDate}   />
-              <InfoRow label="Résolu le"         value={bug.resolvedDate}  />
-              <InfoRow label="Modifié le"        value={bug.changedDate}   />
+              <InfoRow label="Assigned To"        value={fmt(bug.assigned_to)}       />
+              <InfoRow label="Found In"            value={fmt(bug.found_in)}          />
+              <InfoRow label="Integration Build"   value={fmt(bug.integration_build)} />
+              <InfoRow label="Version souhaitée"   value={fmt(bug.version_souhaitee)} />
+              <InfoRow label="Resolved Reason"     value={fmt(bug.resolved_reason)}   />
+              <InfoRow label="Raison d'origine"    value={fmt(bug.raison_origine)}    />
+              <InfoRow label="Créé le"             value={fmtDateShort(bug.created_date)}  />
+              <InfoRow label="Résolu le"           value={fmtDateShort(bug.resolved_date)} />
+              <InfoRow label="Modifié le"          value={fmtDateShort(bug.changed_date)}  />
+              <InfoRow label="Synchronisé le"      value={fmtDateShort(bug.last_synced_at)} />
             </div>
-            <div className="mt-4 pt-4 border-t border-gray-50">
-              <div className="text-xs text-gray-400 font-medium mb-1.5">Iteration Path</div>
-              <div className="text-xs font-mono text-gray-600 bg-gray-50 rounded-xl px-4 py-2.5 border border-gray-100">
-                {bug.iterationPath}
-              </div>
-            </div>
-          </div>
-
-          {/* Violations */}
-          <div className="fade-up fade-up-1 bg-white rounded-2xl shadow-sm border border-red-100 p-6">
-            <h3 className="text-sm font-bold text-red-700 mb-4 flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-red-100 inline-flex items-center justify-center text-red-600 text-xs font-bold">
-                {MOCK_VIOLATIONS.length}
-              </span>
-              Anomalie{MOCK_VIOLATIONS.length > 1 ? 's' : ''} détectée{MOCK_VIOLATIONS.length > 1 ? 's' : ''}
-            </h3>
-            <div className="space-y-3">
-              {MOCK_VIOLATIONS.map(v => (
-                <div key={v.rule} className="bg-red-50 border border-red-100 rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-mono font-semibold text-red-800">{v.rule}</span>
-                    <span className={[
-                      'text-[11px] font-semibold px-2.5 py-0.5 rounded-full',
-                      v.severity === 'error' ? 'bg-red-200 text-red-900' : 'bg-amber-200 text-amber-900',
-                    ].join(' ')}>
-                      {v.severity === 'error' ? 'Erreur' : 'Avertissement'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-red-700">{v.description}</p>
+            {bug.iteration_path && (
+              <div className="mt-4 pt-4 border-t border-gray-50">
+                <div className="text-xs text-gray-400 font-medium mb-1.5">Iteration Path</div>
+                <div className="text-xs font-mono text-gray-600 bg-gray-50 rounded-xl px-4 py-2.5 border border-gray-100">
+                  {bug.iteration_path}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
 
-          {/* Audit trail */}
-          {MOCK_AUDIT.length > 0 && (
-            <div className="fade-up fade-up-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-              <h3 className="text-sm font-bold text-gray-700 mb-4">Historique des modifications ADO</h3>
-              <div className="space-y-2">
-                {MOCK_AUDIT.map((a, i) => (
-                  <div key={i} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-2.5 text-xs border border-gray-100">
-                    <span className="font-mono text-gray-400 shrink-0">{a.date}</span>
-                    <span className="text-gray-200">·</span>
-                    <span className="font-semibold text-gray-700 shrink-0">{a.field}</span>
-                    <span className="text-gray-200">·</span>
-                    <span className="font-mono line-through text-red-400">{a.oldValue}</span>
-                    <span className="text-gray-400">→</span>
-                    <span className="font-mono text-green-600 font-semibold">{a.newValue}</span>
-                    <span className="ml-auto text-gray-400 shrink-0">par {a.user}</span>
+          {/* Anomalies */}
+          <div className={`bg-white rounded-2xl shadow-sm border p-6 ${violations.length > 0 ? 'border-red-100' : 'border-gray-100'}`}>
+            <h3 className={`text-sm font-bold mb-4 flex items-center gap-2 ${violations.length > 0 ? 'text-red-700' : 'text-green-700'}`}>
+              <span className={`w-5 h-5 rounded-full inline-flex items-center justify-center text-xs font-bold ${violations.length > 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                {violations.length > 0 ? violations.length : '✓'}
+              </span>
+              {violations.length > 0
+                ? `${violations.length} anomalie${violations.length > 1 ? 's' : ''} détectée${violations.length > 1 ? 's' : ''}`
+                : 'Aucune anomalie active'}
+            </h3>
+            {violations.length > 0 && (
+              <div className="space-y-3">
+                {violations.map(v => (
+                  <div key={v.id} className="bg-red-50 border border-red-100 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-mono font-semibold text-red-800">{v.rule_code}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={[
+                          'text-[11px] font-semibold px-2.5 py-0.5 rounded-full',
+                          v.severity === 'error' ? 'bg-red-200 text-red-900' : 'bg-amber-200 text-amber-900',
+                        ].join(' ')}>
+                          {v.severity === 'error' ? 'Erreur' : 'Avertissement'}
+                        </span>
+                        <span className="text-[11px] text-gray-400 font-mono">{fmtDateShort(v.detected_at)}</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-red-700">{v.rule_description}</p>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
+
+          {/* Audit trail */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-sm font-bold text-gray-700 mb-4">Historique des modifications ADO</h3>
+            {audit.length === 0 ? (
+              <p className="text-xs text-gray-400">Aucune modification effectuée via QualiPilot.</p>
+            ) : (
+              <div className="space-y-2">
+                {audit.map(a => (
+                  <div key={a.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-2.5 text-xs border border-gray-100 flex-wrap">
+                    <span className="font-mono text-gray-400 shrink-0">{fmtDate(a.performed_at)}</span>
+                    <span className="text-gray-200">·</span>
+                    <span className="font-semibold text-gray-700 shrink-0">{a.field}</span>
+                    <span className="text-gray-200">·</span>
+                    <span className="font-mono line-through text-red-400">{a.old_value ?? '(vide)'}</span>
+                    <span className="text-gray-400">→</span>
+                    <span className="font-mono text-green-600 font-semibold">{a.new_value ?? '(vide)'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── Right column: correction form ── */}
         <div>
-          <div className="fade-up fade-up-1 bg-white rounded-2xl shadow-sm border border-blue-100 p-5 sticky top-0">
+          <div className="bg-white rounded-2xl shadow-sm border border-blue-100 p-5 sticky top-0">
             <div className="flex items-center gap-2 mb-1">
               <div className="w-2 h-2 rounded-full bg-blue-500" />
               <h3 className="text-sm font-bold text-[#0e1a38]">Corriger dans ADO</h3>
@@ -261,41 +354,48 @@ export default function ConformityDetail() {
               Champs autorisés uniquement.
             </p>
             <div className="space-y-5">
-              {WHITELIST.map(field => (
-                <div key={field.key}>
-                  <label className="text-xs font-semibold text-gray-600 block mb-1">{field.label}</label>
-                  <div className="text-[11px] text-gray-400 mb-2">
-                    Actuel :{' '}
-                    <span className="font-mono font-semibold text-gray-600">
-                      {field.initialValue || '(vide)'}
-                    </span>
-                  </div>
-                  {field.type === 'select' ? (
-                    <select
-                      value={fieldValues[field.key]}
-                      onChange={e => setFieldValues(v => ({ ...v, [field.key]: e.target.value }))}
-                      className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              {EDITABLE_FIELDS.map(field => {
+                const currentRaw = field.key === 'priority'
+                  ? String(bug.priority ?? '')
+                  : bug[field.key] ?? '';
+                const hasChanged = (fieldValues[field.key] ?? '') !== currentRaw && (fieldValues[field.key] ?? '') !== '';
+
+                return (
+                  <div key={field.key}>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1">{field.label}</label>
+                    <div className="text-[11px] text-gray-400 mb-2">
+                      Actuel :{' '}
+                      <span className="font-mono font-semibold text-gray-600">
+                        {currentRaw || '(vide)'}
+                      </span>
+                    </div>
+                    {field.type === 'select' ? (
+                      <select
+                        value={fieldValues[field.key] ?? ''}
+                        onChange={e => setFieldValues(v => ({ ...v, [field.key]: e.target.value }))}
+                        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                      >
+                        {field.options?.map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={fieldValues[field.key] ?? ''}
+                        onChange={e => setFieldValues(v => ({ ...v, [field.key]: e.target.value }))}
+                        placeholder="Nouvelle valeur…"
+                        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                      />
+                    )}
+                    <button
+                      onClick={() => handleApply(field.key, field.label)}
+                      disabled={!hasChanged}
+                      className="mt-2 w-full text-xs font-semibold px-3 py-2 rounded-xl bg-[#1E63B6] text-white hover:bg-[#0F3E8A] disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
                     >
-                      {field.options?.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      value={fieldValues[field.key]}
-                      onChange={e => setFieldValues(v => ({ ...v, [field.key]: e.target.value }))}
-                      placeholder="Nouvelle valeur…"
-                      className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                    />
-                  )}
-                  <button
-                    onClick={() => handleApply(field)}
-                    disabled={!fieldValues[field.key] || fieldValues[field.key] === field.initialValue}
-                    className="mt-2 w-full text-xs font-semibold px-3 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
-                  >
-                    Appliquer
-                  </button>
-                </div>
-              ))}
+                      Appliquer
+                    </button>
+                  </div>
+                );
+              })}
             </div>
             <p className="mt-5 pt-4 border-t border-gray-100 text-[11px] text-gray-400 leading-relaxed">
               Seuls les champs de la whitelist peuvent être modifiés. Chaque écriture est tracée.
@@ -304,6 +404,18 @@ export default function ConformityDetail() {
         </div>
 
       </div>
+
+      {/* Modale de confirmation */}
+      {confirm && (
+        <ConfirmModal
+          title="Confirmer la modification ADO"
+          message={`Champ : ${confirm.label}\nValeur actuelle : ${confirm.oldValue || '(vide)'}\nNouvelle valeur : ${confirm.newValue}\n\nCette action est tracée dans l'audit log.`}
+          confirmLabel="Confirmer dans ADO"
+          loading={saving}
+          onConfirm={handleConfirm}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
     </Layout>
   );
 }

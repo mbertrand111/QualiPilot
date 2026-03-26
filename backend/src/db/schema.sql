@@ -1,0 +1,104 @@
+-- Équipes (référence configurable)
+CREATE TABLE IF NOT EXISTS teams (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  name      TEXT NOT NULL UNIQUE,
+  ado_area  TEXT,
+  active    INTEGER DEFAULT 1
+);
+
+-- Objectifs par équipe et sprint
+CREATE TABLE IF NOT EXISTS team_sprint_objectives (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id     INTEGER REFERENCES teams(id),
+  sprint_name TEXT NOT NULL,
+  pi_name     TEXT,
+  max_bugs    INTEGER NOT NULL,
+  created_at  TEXT DEFAULT (datetime('now'))
+);
+
+-- Règles de conformité (moteur de règles)
+CREATE TABLE IF NOT EXISTS conformity_rules (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  code        TEXT NOT NULL UNIQUE,
+  description TEXT NOT NULL,
+  severity    TEXT NOT NULL CHECK(severity IN ('error', 'warning')),
+  active      INTEGER DEFAULT 1,
+  rule_config TEXT NOT NULL DEFAULT '{}'
+);
+
+-- Cache des bugs synchronisés depuis ADO
+CREATE TABLE IF NOT EXISTS bugs_cache (
+  id                INTEGER PRIMARY KEY,
+  title             TEXT,
+  state             TEXT,
+  priority          INTEGER,
+  area_path         TEXT,
+  iteration_path    TEXT,
+  sprint            TEXT,   -- ex: "PI2-SP4", extrait de iteration_path
+  assigned_to       TEXT,
+  team              TEXT,   -- extrait du 2e segment de area_path
+  filiere           TEXT,
+  created_date      TEXT,
+  resolved_date     TEXT,
+  changed_date      TEXT,
+  found_in          TEXT,
+  integration_build TEXT,
+  version_souhaitee TEXT,   -- Isagri.Feature.VersionSouhaiteeGC
+  resolved_reason   TEXT,   -- Isagri.ResolvedReason (custom Isagri, pas Microsoft.VSTS.Common.ResolvedReason)
+  raison_origine    TEXT,   -- Isagri.RaisonOrigine
+  sprint_done       TEXT,   -- Isagri.Feature.SprintDone (ex: "PI6-SP3")
+  raw_json          TEXT,
+  last_synced_at    TEXT DEFAULT (datetime('now'))
+);
+
+-- Violations de conformité détectées
+CREATE TABLE IF NOT EXISTS conformity_violations (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  bug_id      INTEGER REFERENCES bugs_cache(id),
+  rule_id     INTEGER REFERENCES conformity_rules(id),
+  detected_at TEXT DEFAULT (datetime('now')),
+  resolved_at TEXT,
+  UNIQUE(bug_id, rule_id)
+);
+
+-- Snapshots KPI (historisation automatique hebdomadaire)
+CREATE TABLE IF NOT EXISTS kpi_snapshots (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  snapshot_date         TEXT NOT NULL,
+  team_id               INTEGER REFERENCES teams(id),
+  sprint_name           TEXT,
+  pi_name               TEXT,
+  open_bugs             INTEGER,
+  created_this_period   INTEGER,
+  closed_this_period    INTEGER,
+  violations_count      INTEGER,
+  created_at            TEXT DEFAULT (datetime('now'))
+);
+
+-- Audit des écritures Azure DevOps
+CREATE TABLE IF NOT EXISTS ado_write_audit (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_item_id  INTEGER NOT NULL,
+  field         TEXT NOT NULL,
+  old_value     TEXT,
+  new_value     TEXT,
+  performed_at  TEXT DEFAULT (datetime('now'))
+);
+
+-- Données initiales : 8 équipes
+INSERT OR IGNORE INTO teams (name) VALUES
+  ('COCO'), ('GO FAHST'), ('JURASSIC BACK'), ('MAGIC SYSTEM'),
+  ('MELI MELO'), ('NULL.REF'), ('PIXELS'), ('LACE');
+
+-- Données initiales : 10 règles de conformité
+INSERT OR IGNORE INTO conformity_rules (code, description, severity, active, rule_config) VALUES
+  ('PRIORITY_CHECK',               'Priority doit être 2',                           'error',   1, '{}'),
+  ('VERSION_SOUHAITEE_CHECK',      'Format version souhaitée GC valide',             'error',   1, '{}'),
+  ('INTEGRATION_BUILD_REQUIRED',   'Bugs fermés récents avec build valide',          'error',   1, '{}'),
+  ('VERSION_BUILD_COHERENCE',      'Version souhaitée et build cohérents',           'error',   1, '{}'),
+  ('INTEGRATION_BUILD_NOT_EMPTIED','Bugs actifs/New sans Integration Build',         'warning', 1, '{}'),
+  ('CLOSED_BUG_COHERENCE',         'Bug non-corrigé → version & build = "-"',        'error',   1, '{}'),
+  ('NON_CONCERNE_COHERENCE',       '"Non concerné" présent dans les 2 champs',       'warning', 1, '{}'),
+  ('FAH_VERSION_REQUIRED',         'Bugs FAH récents avec version souhaitée FAH',   'error',   1, '{}'),
+  ('CLOSED_BUG_IN_TRIAGE_AREA',   'Bug fermé dans zone triage sans "-" en version', 'error',   1, '{}'),
+  ('AREA_PATH_PRODUCT_COHERENCE',  'Bug à corriger classé dans le bon sous-dossier', 'error',   1, '{}');
