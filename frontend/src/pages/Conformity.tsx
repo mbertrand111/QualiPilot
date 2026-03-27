@@ -8,7 +8,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
 
 type Severity = 'error' | 'warning';
 type SortDir = 'asc' | 'desc';
-type WritableField = 'priority' | 'version_souhaitee' | 'integration_build';
+type WritableField = 'priority' | 'version_souhaitee' | 'integration_build' | 'area_path';
 
 interface Violation {
   bug_id: number;
@@ -19,6 +19,7 @@ interface Violation {
   bug_version_souhaitee: string | null;
   bug_integration_build: string | null;
   bug_found_in: string | null;
+  bug_resolved_reason: string | null;
   bug_changed_date: string | null;
 }
 
@@ -54,24 +55,86 @@ interface ConfirmState {
 
 const LIMIT = 50;
 
+const REAL_TEAMS = ['COCO', 'GO FAHST', 'JURASSIC BACK', 'MAGIC SYSTEM', 'MELI MELO', 'NULL.REF', 'PIXELS', 'LACE'];
+
+// Anciennes équipes à masquer (bugs en cache potentiellement encore présents)
+const OBSOLETE_TEAMS = new Set(['PIRATS', 'CORTEX']);
+
+const ZONE_TEAM_OPTIONS = [
+  'Bugs à prioriser',
+  'Bugs à corriger LIVE',
+  'Bugs à corriger OnPremise',
+  'Bugs à corriger Hors versions',
+  'Bugs à corriger',
+];
+const ZONE_TEAM_LABELS: Record<string, string> = {
+  'Bugs à prioriser':              'Bugs à prioriser',
+  'Bugs à corriger LIVE':          'À corriger — Live',
+  'Bugs à corriger OnPremise':     'À corriger — OnPremise',
+  'Bugs à corriger Hors versions': 'À corriger — Hors version',
+  'Bugs à corriger':               'À corriger (sans zone)',
+};
+
+const BUG_TYPE_LABELS: Record<string, string> = {
+  live:          'Live',
+  onpremise:     'OnPremise',
+  hors_version:  'Hors version',
+  uncategorized: 'Non catégorisés',
+};
+
 const ALL_RULES = [
   'PRIORITY_CHECK',
-  'VERSION_SOUHAITEE_CHECK',
-  'INTEGRATION_BUILD_REQUIRED',
-  'VERSION_BUILD_COHERENCE',
   'INTEGRATION_BUILD_NOT_EMPTIED',
-  'CLOSED_BUG_COHERENCE',
-  'NON_CONCERNE_COHERENCE',
+  'TRIAGE_AREA_CHECK',
   'FAH_VERSION_REQUIRED',
-  'CLOSED_BUG_IN_TRIAGE_AREA',
-  'AREA_PATH_PRODUCT_COHERENCE',
+  'CLOSED_BUG_COHERENCE',
+  'VERSION_CHECK',
+  'BUILD_CHECK',
+  'VERSION_BUILD_COHERENCE',
 ];
 
 const FIELD_LABELS: Record<WritableField, string> = {
-  priority: 'Priorité',
+  priority:          'Priorité',
   version_souhaitee: 'Version souhaitée',
   integration_build: 'Build',
+  area_path:         'Zone',
 };
+
+const ADO_PROJECT = 'Isagri_Dev_GC_GestionCommerciale';
+
+// Mapping label affiché → suffix dans l'area path ADO (quand ils diffèrent)
+const TEAM_AREA_SUFFIX: Record<string, string> = {
+  'GO FAHST':     'GO_FAHST',
+  'MAGIC SYSTEM': 'MAGIC_SYSTEM',
+  'MELI MELO':    'MELI_MELO',
+  'NULL.REF':     'NULLREF',
+};
+
+function teamAreaPath(label: string): string {
+  return `${ADO_PROJECT}\\${TEAM_AREA_SUFFIX[label] ?? label}`;
+}
+
+const TEAM_AREA_SUFFIXES = new Set(
+  REAL_TEAMS.map(t => TEAM_AREA_SUFFIX[t] ?? t)
+);
+
+function areaPathLabel(path: string): string {
+  const suffix = path.startsWith(ADO_PROJECT + '\\') ? path.slice(ADO_PROJECT.length + 1) : path;
+  if (suffix === 'Bugs à corriger\\Versions LIVE')        return 'À corriger — Live';
+  if (suffix === 'Bugs à corriger\\Versions historiques') return 'À corriger — OnPremise';
+  if (suffix === 'Bugs à corriger\\Hors versions')        return 'À corriger — Hors version';
+  return suffix;
+}
+
+function isTeamAreaPath(path: string): boolean {
+  const suffix = path.startsWith(ADO_PROJECT + '\\') ? path.slice(ADO_PROJECT.length + 1) : path;
+  return TEAM_AREA_SUFFIXES.has(suffix);
+}
+
+function isObsoleteTeamAreaPath(path: string): boolean {
+  const suffix = path.startsWith(ADO_PROJECT + '\\') ? path.slice(ADO_PROJECT.length + 1) : path;
+  return OBSOLETE_TEAMS.has(suffix);
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -248,10 +311,14 @@ export default function Conformity() {
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
 
-  const [teams, setTeams] = useState<string[]>([]);
+  const [sprints, setSprints]     = useState<string[]>([]);
+  const [areaPaths, setAreaPaths] = useState<string[]>([]);
 
   // Filtres
   const [filterTeams,    setFilterTeams]    = useState<string[]>([]);
+  const [filterZones,    setFilterZones]    = useState<string[]>([]);
+  const [filterSprints,  setFilterSprints]  = useState<string[]>([]);
+  const [filterBugTypes, setFilterBugTypes] = useState<string[]>([]);
   const [filterRules,    setFilterRules]    = useState<string[]>([]);
   const [filterStates,   setFilterStates]   = useState<string[]>([]);
   const [filterTitle,    setFilterTitle]    = useState('');
@@ -289,7 +356,8 @@ export default function Conformity() {
   const [bulkError, setBulkError]   = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/bugs/meta/teams').then(r => r.json()).then(setTeams).catch(() => {});
+    fetch('/api/bugs/meta/sprints').then(r => r.json()).then(setSprints).catch(() => {});
+    fetch('/api/bugs/meta/areas').then(r => r.json()).then(setAreaPaths).catch(() => {});
   }, []);
 
   const load = useCallback(async (p: number) => {
@@ -297,13 +365,16 @@ export default function Conformity() {
     setError(null);
     try {
       const params = new URLSearchParams({ page: String(p), limit: String(LIMIT), sort, dir });
-      if (filterTeams.length)   params.set('team',      filterTeams.join(','));
-      if (filterRules.length)   params.set('rule_code', filterRules.join(','));
-      if (filterStates.length)  params.set('state',     filterStates.join(','));
-      if (filterTitle)          params.set('title',     filterTitle);
-      if (filterVersion)        params.set('version',   filterVersion);
-      if (filterFoundIn)        params.set('found_in',  filterFoundIn);
-      if (filterBuild)          params.set('build',     filterBuild);
+      const teamValues = [...filterTeams, ...filterZones];
+      if (teamValues.length)      params.set('team',      teamValues.join(','));
+      if (filterSprints.length)   params.set('sprint',    filterSprints.join(','));
+      if (filterBugTypes.length)  params.set('bug_type',  filterBugTypes.join(','));
+      if (filterRules.length)     params.set('rule_code', filterRules.join(','));
+      if (filterStates.length)    params.set('state',     filterStates.join(','));
+      if (filterTitle)            params.set('title',     filterTitle);
+      if (filterVersion)          params.set('version',   filterVersion);
+      if (filterFoundIn)          params.set('found_in',  filterFoundIn);
+      if (filterBuild)            params.set('build',     filterBuild);
 
       const res = await fetch(`/api/conformity/violations?${params}`);
       if (!res.ok) throw new Error(`Erreur ${res.status}`);
@@ -317,7 +388,7 @@ export default function Conformity() {
     } finally {
       setLoading(false);
     }
-  }, [filterTeams, filterRules, filterStates, filterTitle, filterVersion, filterFoundIn, filterBuild, sort, dir]);
+  }, [filterTeams, filterZones, filterSprints, filterBugTypes, filterRules, filterStates, filterTitle, filterVersion, filterFoundIn, filterBuild, sort, dir]);
 
   useEffect(() => { load(1); }, [load]);
 
@@ -358,7 +429,8 @@ export default function Conformity() {
   }
 
   function resetFilters() {
-    setFilterTeams([]); setFilterRules([]); setFilterStates([]);
+    setFilterTeams([]); setFilterZones([]); setFilterSprints([]); setFilterBugTypes([]);
+    setFilterRules([]); setFilterStates([]);
     setFilterTitle(''); setFilterVersion(''); setFilterFoundIn(''); setFilterBuild('');
   }
 
@@ -455,7 +527,7 @@ export default function Conformity() {
 
   // ─── Dérivés ────────────────────────────────────────────────────────────────
 
-  const hasFilters  = filterTeams.length || filterRules.length || filterStates.length || filterTitle || filterVersion || filterFoundIn || filterBuild;
+  const hasFilters  = filterTeams.length || filterZones.length || filterSprints.length || filterBugTypes.length || filterRules.length || filterStates.length || filterTitle || filterVersion || filterFoundIn || filterBuild;
   const totalPages  = Math.ceil(total / LIMIT);
 
 
@@ -538,11 +610,32 @@ export default function Conformity() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4 space-y-3">
         {/* Ligne 1 : multi-selects */}
         <div className="flex flex-wrap gap-3 items-center">
-          <MultiSelect label="Équipes" options={teams} selected={filterTeams} onChange={setFilterTeams} />
+          <MultiSelect label="Équipes" options={REAL_TEAMS} selected={filterTeams} onChange={setFilterTeams} />
+          <MultiSelect
+            label="Zone"
+            options={ZONE_TEAM_OPTIONS}
+            selected={filterZones}
+            onChange={setFilterZones}
+            renderOption={opt => <span>{ZONE_TEAM_LABELS[opt] ?? opt}</span>}
+          />
           <MultiSelect label="États" options={['New', 'Active', 'Resolved', 'Closed']} selected={filterStates} onChange={setFilterStates}
             renderOption={(opt: string) => (
               <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold ${STATE_STYLES[opt] ?? 'bg-gray-100 text-gray-600'}`}>{opt}</span>
             )}
+          />
+          <MultiSelect label="Sprints" options={sprints} selected={filterSprints} onChange={setFilterSprints}
+            groupBy={v => {
+              const sep = v.indexOf(' · ');
+              if (sep === -1) return { group: '', itemLabel: v };
+              return { group: v.slice(0, sep) === 'Archive' ? 'Archives' : v.slice(0, sep), itemLabel: v.slice(sep + 3) };
+            }}
+          />
+          <MultiSelect
+            label="Type"
+            options={['live', 'onpremise', 'hors_version', 'uncategorized']}
+            selected={filterBugTypes}
+            onChange={setFilterBugTypes}
+            renderOption={opt => <span>{BUG_TYPE_LABELS[opt] ?? opt}</span>}
           />
           <MultiSelect label="Règles" options={ALL_RULES} selected={filterRules} onChange={setFilterRules} />
           {hasFilters && (
@@ -595,11 +688,12 @@ export default function Conformity() {
                     />
                   </th>
                   <Th col="bug_id"            label="ID"               sort={sort} dir={dir} onSort={handleSort} />
-                  <Th col="title"             label="Titre"            sort={sort} dir={dir} onSort={handleSort} className="min-w-[200px]" />
+                  <Th col="title"             label="Titre"            sort={sort} dir={dir} onSort={handleSort} className="min-w-[160px]" />
                   <Th col="state"             label="État"             sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="team"              label="Équipe"           sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="priority"          label="Prio"             sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="found_in"          label="Trouvé dans"      sort={sort} dir={dir} onSort={handleSort} />
+                  <Th col="resolved_reason"   label="Raison"           sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="version_souhaitee" label="Version souhaitée" sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="integration_build" label="Build"            sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="changed_date"      label="Modifié"          sort={sort} dir={dir} onSort={handleSort} />
@@ -608,11 +702,11 @@ export default function Conformity() {
               </thead>
               <tbody>
                 {loading && (
-                  <tr><td colSpan={11} className="px-4 py-10 text-center text-gray-400 text-sm">Chargement…</td></tr>
+                  <tr><td colSpan={12} className="px-4 py-10 text-center text-gray-400 text-sm">Chargement…</td></tr>
                 )}
                 {!loading && violations.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="px-4 py-16 text-center">
+                    <td colSpan={12} className="px-4 py-16 text-center">
                       <div className="text-4xl mb-3">✓</div>
                       <div className="text-sm font-semibold text-green-700 mb-1">Aucune anomalie</div>
                       <div className="text-xs text-gray-400">
@@ -686,6 +780,9 @@ export default function Conformity() {
 
                       {/* Trouvé dans */}
                       <td className="px-4 py-3 font-mono text-[12px] text-gray-500 whitespace-nowrap">{v.bug_found_in ?? ''}</td>
+
+                      {/* Raison */}
+                      <td className="px-4 py-3 text-[12px] text-gray-500 whitespace-nowrap">{v.bug_resolved_reason ?? ''}</td>
 
                       {/* Version souhaitée — éditable */}
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
@@ -773,12 +870,17 @@ export default function Conformity() {
           {/* Sélecteur champ */}
           <select
             value={bulkField}
-            onChange={e => { setBulkField(e.target.value as WritableField); setBulkValue(e.target.value === 'priority' ? '2' : ''); }}
+            onChange={e => {
+              const f = e.target.value as WritableField;
+              setBulkField(f);
+              setBulkValue(f === 'priority' ? '2' : f === 'area_path' ? (areaPaths[0] ?? '') : '');
+            }}
             className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 shrink-0"
           >
             <option value="priority">Priorité</option>
             <option value="version_souhaitee">Version souhaitée</option>
             <option value="integration_build">Build</option>
+            <option value="area_path">Zone</option>
           </select>
 
           {/* Valeur */}
@@ -792,6 +894,24 @@ export default function Conformity() {
               <option value="2">2</option>
               <option value="3">3</option>
               <option value="4">4</option>
+            </select>
+          ) : bulkField === 'area_path' ? (
+            <select
+              value={bulkValue}
+              onChange={e => setBulkValue(e.target.value)}
+              className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 shrink-0 max-w-[200px]"
+            >
+              <optgroup label="Équipes">
+                {REAL_TEAMS.map(t => {
+                  const p = teamAreaPath(t);
+                  return <option key={p} value={p}>{t}</option>;
+                })}
+              </optgroup>
+              <optgroup label="Zone">
+                {areaPaths.filter(p => !isTeamAreaPath(p) && !isObsoleteTeamAreaPath(p)).map(p => (
+                  <option key={p} value={p}>{areaPathLabel(p)}</option>
+                ))}
+              </optgroup>
             </select>
           ) : (
             <input
@@ -841,7 +961,7 @@ export default function Conformity() {
       {confirmBulk && (
         <ConfirmModal
           title={`Modifier ${selectedIds.size} bug${selectedIds.size > 1 ? 's' : ''}`}
-          message={`Champ : ${FIELD_LABELS[bulkField]}\nNouvelle valeur : "${bulkValue}"\n\nCette action modifiera ${selectedIds.size} bug${selectedIds.size > 1 ? 's' : ''} dans Azure DevOps.`}
+          message={`Champ : ${FIELD_LABELS[bulkField]}\nNouvelle valeur : "${bulkField === 'area_path' ? areaPathLabel(bulkValue) : bulkValue}"\n\nCette action modifiera ${selectedIds.size} bug${selectedIds.size > 1 ? 's' : ''} dans Azure DevOps.`}
           confirmLabel={`Appliquer à ${selectedIds.size} bug${selectedIds.size > 1 ? 's' : ''}`}
           loading={savingBulk}
           onConfirm={confirmBulkSave}

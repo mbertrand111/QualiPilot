@@ -1,4 +1,5 @@
 import { useLocation, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
@@ -52,11 +53,19 @@ function CogIcon({ className }: { className?: string }) {
   );
 }
 
+function ChevronLeftIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+    </svg>
+  );
+}
+
 // ─── Nav config ──────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
   { path: '/',           icon: HomeIcon,    label: 'Tableau de bord', exact: true },
-  { path: '/triage',     icon: TriageIcon,  label: 'Bugs à trier',     exact: false },
+  { path: '/triage',     icon: TriageIcon,  label: 'Bugs',             exact: false },
   { path: '/conformity', icon: AlertIcon,   label: 'Anomalies',        exact: false },
   { path: '/kpis',       icon: ChartIcon,   label: 'KPIs',             exact: false },
   { path: '/history',    icon: ClockIcon,   label: 'Historique',       exact: false },
@@ -71,25 +80,75 @@ interface LayoutProps {
   actions?: ReactNode;
 }
 
+function formatSyncDate(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+    + ' — '
+    + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
 export function Layout({ children, title, actions }: LayoutProps) {
   const location = useLocation();
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(() => {
+    return localStorage.getItem('nav-collapsed') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('nav-collapsed', String(collapsed));
+  }, [collapsed]);
+
+  useEffect(() => {
+    function fetchSync() {
+      fetch('/api/health')
+        .then(r => r.json())
+        .then((d: { last_sync_at?: string | null }) => setLastSyncAt(d.last_sync_at ?? null))
+        .catch(() => {});
+    }
+    fetchSync();
+    const id = setInterval(fetchSync, 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <div className="flex h-screen bg-[#f7f8fc] overflow-hidden font-sans">
 
       {/* ── Sidebar ── */}
-      <aside className="w-60 bg-[#0b1e45] sidebar-texture flex flex-col shrink-0 shadow-2xl z-10">
+      <aside className={[
+        'bg-[#0b1e45] sidebar-texture flex flex-col shrink-0 shadow-2xl z-10 transition-all duration-200',
+        collapsed ? 'w-16' : 'w-60',
+      ].join(' ')}>
 
-        {/* Logo */}
-        <div className="px-5 py-4 border-b border-white/[0.07]">
-          <img src="/logo-dark.png" alt="QualiPilot" className="h-10 w-auto" />
+        {/* Logo + toggle */}
+        <div className={[
+          'border-b border-white/[0.07] flex items-center',
+          collapsed ? 'px-3 py-4 justify-center' : 'px-5 py-4 justify-between',
+        ].join(' ')}>
+          {collapsed ? (
+            <span className="text-[#66D2DB] font-black text-lg tracking-tight select-none">Q</span>
+          ) : (
+            <img src="/logo-dark.png" alt="QualiPilot" className="h-10 w-auto" />
+          )}
+          <button
+            onClick={() => setCollapsed(c => !c)}
+            title={collapsed ? 'Agrandir la navigation' : 'Réduire la navigation'}
+            className={[
+              'flex items-center justify-center w-6 h-6 rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition-colors shrink-0',
+              collapsed ? 'mt-0' : '',
+            ].join(' ')}
+          >
+            <ChevronLeftIcon className={`w-3.5 h-3.5 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`} />
+          </button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          <div className="px-3 mb-3">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30">Navigation</span>
-          </div>
+        <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
+          {!collapsed && (
+            <div className="px-3 mb-3">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30">Navigation</span>
+            </div>
+          )}
 
           {NAV_ITEMS.map(({ path, icon: Icon, label, exact }) => {
             const active = exact
@@ -100,16 +159,18 @@ export function Layout({ children, title, actions }: LayoutProps) {
               <Link
                 key={path}
                 to={path}
+                title={collapsed ? label : undefined}
                 className={[
-                  'flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] font-medium group',
+                  'flex items-center rounded-xl font-medium group transition-colors',
+                  collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-3 py-2.5 text-[13px]',
                   active
                     ? 'bg-[#1E63B6] text-white shadow-md shadow-[#0F3E8A]/60'
                     : 'text-white/50 hover:bg-white/[0.07] hover:text-white',
                 ].join(' ')}
               >
                 <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-[#66D2DB]' : 'text-white/40 group-hover:text-white/80'}`} />
-                <span className="truncate">{label}</span>
-                {active && (
+                {!collapsed && <span className="truncate">{label}</span>}
+                {!collapsed && active && (
                   <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#66D2DB] shrink-0" />
                 )}
               </Link>
@@ -118,17 +179,24 @@ export function Layout({ children, title, actions }: LayoutProps) {
         </nav>
 
         {/* Sync status footer */}
-        <div className="px-5 py-4 border-t border-white/[0.07]">
-          <div className="flex items-center gap-2.5">
-            <span className="relative flex h-2 w-2 shrink-0">
+        <div className={['border-t border-white/[0.07]', collapsed ? 'px-0 py-4 flex justify-center' : 'px-5 py-4'].join(' ')}>
+          {collapsed ? (
+            <span className="relative flex h-2 w-2 shrink-0" title={`Dernière sync : ${formatSyncDate(lastSyncAt)}`}>
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#66D2DB] opacity-60"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-[#66D2DB]"></span>
             </span>
-            <div className="min-w-0">
-              <div className="text-[11px] text-white/40 font-medium">Dernière sync</div>
-              <div className="text-[11px] text-white/50 font-mono truncate">23/03/2026 — 09:30</div>
+          ) : (
+            <div className="flex items-center gap-2.5">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#66D2DB] opacity-60"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#66D2DB]"></span>
+              </span>
+              <div className="min-w-0">
+                <div className="text-[11px] text-white/40 font-medium">Dernière sync</div>
+                <div className="text-[11px] text-white/50 font-mono truncate">{formatSyncDate(lastSyncAt)}</div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </aside>
 

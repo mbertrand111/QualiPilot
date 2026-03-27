@@ -90,15 +90,13 @@ INSERT OR IGNORE INTO teams (name) VALUES
   ('COCO'), ('GO FAHST'), ('JURASSIC BACK'), ('MAGIC SYSTEM'),
   ('MELI MELO'), ('NULL.REF'), ('PIXELS'), ('LACE');
 
--- Données initiales : 10 règles de conformité
+-- Données initiales : 8 règles de conformité (ordre d'affichage dans les paramètres)
 INSERT OR IGNORE INTO conformity_rules (code, description, severity, active, rule_config) VALUES
-  ('PRIORITY_CHECK',               'Priority doit être 2',                           'error',   1, '{}'),
-  ('VERSION_SOUHAITEE_CHECK',      'Format version souhaitée GC valide',             'error',   1, '{}'),
-  ('INTEGRATION_BUILD_REQUIRED',   'Bugs fermés récents avec build valide',          'error',   1, '{}'),
-  ('VERSION_BUILD_COHERENCE',      'Version souhaitée et build cohérents',           'error',   1, '{}'),
-  ('INTEGRATION_BUILD_NOT_EMPTIED','Bugs actifs/New sans Integration Build',         'warning', 1, '{}'),
-  ('CLOSED_BUG_COHERENCE',         'Bug non-corrigé → version & build = "-"',        'error',   1, '{}'),
-  ('NON_CONCERNE_COHERENCE',       '"Non concerné" présent dans les 2 champs',       'warning', 1, '{}'),
-  ('FAH_VERSION_REQUIRED',         'Bugs FAH récents avec version souhaitée FAH',   'error',   1, '{}'),
-  ('CLOSED_BUG_IN_TRIAGE_AREA',   'Bug fermé dans zone triage sans "-" en version', 'error',   1, '{}'),
-  ('AREA_PATH_PRODUCT_COHERENCE',  'Bug à corriger classé dans le bon sous-dossier', 'error',   1, '{}');
+  ('PRIORITY_CHECK',               'Priority doit être 2',                                                     'error',   1, '{}'),
+  ('INTEGRATION_BUILD_NOT_EMPTIED','Bugs New/Active doivent avoir Integration Build vide',                     'error',   1, '{}'),
+  ('TRIAGE_AREA_CHECK',            'Cohérence zone triage : bugs fermés, sous-classement et produit correct',  'error',   1, '{}'),
+  ('FAH_VERSION_REQUIRED',         'Bugs LIVE (found_in ≥ 14.xx) doivent avoir version souhaitée avec FAH_',  'error',   1, '{}'),
+  ('CLOSED_BUG_COHERENCE',         'Bug non-corrigé (Closed) → version & build doivent être "-"',             'error',   1, '{}'),
+  ('VERSION_CHECK',                'Format version souhaitée valide selon le type de bug (FAH_ / 12. / 13.8)','error',   1, '{}'),
+  ('BUILD_CHECK',                  'Bugs Closed/Resolved doivent avoir un build valide dans la liste connue',  'error',   1, '{}'),
+  ('VERSION_BUILD_COHERENCE',      'Cohérence version souhaitée / build (Non concerné, format Patch)',         'error',   1, '{}');

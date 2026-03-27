@@ -54,9 +54,9 @@ function StatCard({ label, value, sub, color, onClick }: StatCardProps) {
 export function Home() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<HomeStats | null>(null);
-  const [syncing,    setSyncing]    = useState(false);
-  const [syncResult, setSyncResult] = useState<{ synced: number; lastSyncAt: string } | null>(null);
-  const [syncError,  setSyncError]  = useState<string | null>(null);
+  const [syncing,   setSyncing]   = useState(false);
+  const [syncResult, setSyncResult] = useState<{ synced: number } | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/stats/home').then(r => r.json()).then(setStats).catch(() => {});
@@ -70,8 +70,8 @@ export function Home() {
       const res = await fetch('/api/sync', { method: 'POST' });
       if (!res.ok) throw new Error(`Erreur ${res.status}`);
       const result = await res.json();
-      setSyncResult(result);
-      // Reload stats after sync
+      setSyncResult({ synced: result.synced });
+      window.dispatchEvent(new CustomEvent('qualipilot:synced'));
       fetch('/api/stats/home').then(r => r.json()).then(setStats).catch(() => {});
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : 'Erreur inconnue');
@@ -155,7 +155,7 @@ export function Home() {
       </div>
 
       {/* Section — Actions rapides */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <StatCard
           label="Anomalies actives"
           value={stats?.anomalies.total ?? '…'}
@@ -169,12 +169,6 @@ export function Home() {
           sub="Bugs à prioriser / corriger →"
           color="amber"
           onClick={() => navigate('/triage')}
-        />
-        <StatCard
-          label="Synchronisation"
-          value={syncResult ? new Date(syncResult.lastSyncAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '—'}
-          sub="Dernière sync"
-          color="blue"
         />
       </div>
     </Layout>

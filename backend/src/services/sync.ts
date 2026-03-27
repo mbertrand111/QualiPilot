@@ -48,13 +48,19 @@ function extractTeamFromAreaPath(areaPath: string | null): string | null {
   return level1;
 }
 
-// Extrait le sprint depuis l'iteration path
-// Ex: "Isagri_Dev_GC_GestionCommerciale\2025-2026\PI2\PI2-SP4" → "PI2-SP4"
-//     "Isagri_Dev_GC_GestionCommerciale\Z_Archives\2024-2025\PI5" → "PI5"
+// Extrait le sprint depuis l'iteration path, préfixé par l'exercice ou "Archive"
+// Ex: "Isagri_Dev_GC_GestionCommerciale\2025-2026\PI2\PI2-SP4" → "2025-2026 · PI2-SP4"
+//     "Isagri_Dev_GC_GestionCommerciale\Z_Archives\2024-2025\PI5\PI5-SP2" → "Archive · PI5-SP2"
 function extractSprintFromIterationPath(iterationPath: string | null): string | null {
   if (!iterationPath) return null;
-  const match = iterationPath.match(/PI\d+(?:-SP\d+)?$/);
-  return match ? match[0] : null;
+  const sprintMatch = iterationPath.match(/PI\d+(?:-SP\d+)?$/);
+  if (!sprintMatch) return null;
+  const sprint = sprintMatch[0];
+
+  if (/archive/i.test(iterationPath)) return `Archive · ${sprint}`;
+
+  const exerciseMatch = iterationPath.match(/(\d{4}-\d{4})/);
+  return exerciseMatch ? `${exerciseMatch[1]} · ${sprint}` : sprint;
 }
 
 // ─── Mapper ───────────────────────────────────────────────────────────────────

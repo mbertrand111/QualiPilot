@@ -59,12 +59,45 @@ const BUG_TYPE_LABELS: Record<string, string> = {
 
 const ADO_PROJECT = 'Isagri_Dev_GC_GestionCommerciale';
 
+// Les 8 équipes réelles (hors zones ADO)
+const REAL_TEAMS = ['COCO', 'GO FAHST', 'JURASSIC BACK', 'MAGIC SYSTEM', 'MELI MELO', 'NULL.REF', 'PIXELS', 'LACE'];
+
+// Anciennes équipes à masquer (bugs en cache potentiellement encore présents)
+const OBSOLETE_TEAMS = new Set(['PIRATS', 'CORTEX']);
+
+// Mapping label affiché → suffix dans l'area path ADO (quand ils diffèrent)
+const TEAM_AREA_SUFFIX: Record<string, string> = {
+  'GO FAHST':     'GO_FAHST',
+  'MAGIC SYSTEM': 'MAGIC_SYSTEM',
+  'MELI MELO':    'MELI_MELO',
+  'NULL.REF':     'NULLREF',
+};
+
+// Suffixes ADO reconnus comme équipes (inclut les variantes underscore)
+const TEAM_AREA_SUFFIXES = new Set(
+  REAL_TEAMS.map(t => TEAM_AREA_SUFFIX[t] ?? t)
+);
+
+function teamAreaPath(label: string): string {
+  return `${ADO_PROJECT}\\${TEAM_AREA_SUFFIX[label] ?? label}`;
+}
+
 function areaPathLabel(path: string): string {
   const suffix = path.startsWith(ADO_PROJECT + '\\') ? path.slice(ADO_PROJECT.length + 1) : path;
   if (suffix === 'Bugs à corriger\\Versions LIVE')        return 'À corriger — Live';
   if (suffix === 'Bugs à corriger\\Versions historiques') return 'À corriger — OnPremise';
   if (suffix === 'Bugs à corriger\\Hors versions')        return 'À corriger — Hors version';
   return suffix;
+}
+
+function isTeamAreaPath(path: string): boolean {
+  const suffix = path.startsWith(ADO_PROJECT + '\\') ? path.slice(ADO_PROJECT.length + 1) : path;
+  return TEAM_AREA_SUFFIXES.has(suffix);
+}
+
+function isObsoleteTeamAreaPath(path: string): boolean {
+  const suffix = path.startsWith(ADO_PROJECT + '\\') ? path.slice(ADO_PROJECT.length + 1) : path;
+  return OBSOLETE_TEAMS.has(suffix);
 }
 
 function StateBadge({ state }: { state: string }) {
@@ -113,9 +146,6 @@ const CARDS: { key: ActiveCard; label: string; color: string; borderColor: strin
 const ALL_STATES = ['New', 'Active', 'Resolved', 'Closed'];
 const DEFAULT_STATES = ['New', 'Active'];
 const LIMIT = 50;
-
-// Les 8 équipes réelles (hors zones ADO)
-const REAL_TEAMS = ['COCO', 'GO FAHST', 'JURASSIC BACK', 'MAGIC SYSTEM', 'MELI MELO', 'NULL.REF', 'PIXELS', 'LACE'];
 
 // Zones ADO (valeurs stockées dans la colonne team)
 const ZONE_TEAM_OPTIONS = [
@@ -351,7 +381,7 @@ export default function Triage() {
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
-    <Layout title="Bugs à trier" actions={
+    <Layout title="Bugs" actions={
       <div className="flex items-center gap-3">
         <span className="text-sm text-gray-400 font-mono">{total.toLocaleString('fr-FR')} bugs</span>
         <button
@@ -447,7 +477,13 @@ export default function Triage() {
               </span>
             )}
           />
-          <MultiSelect label="Sprints" options={sprints} selected={filterSprints} onChange={setFilterSprints} />
+          <MultiSelect label="Sprints" options={sprints} selected={filterSprints} onChange={setFilterSprints}
+            groupBy={v => {
+              const sep = v.indexOf(' · ');
+              if (sep === -1) return { group: '', itemLabel: v };
+              return { group: v.slice(0, sep) === 'Archive' ? 'Archives' : v.slice(0, sep), itemLabel: v.slice(sep + 3) };
+            }}
+          />
           <MultiSelect
             label="Type"
             options={['live', 'onpremise', 'hors_version', 'uncategorized']}
@@ -486,14 +522,6 @@ export default function Triage() {
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-          <span className="text-sm font-semibold text-gray-700">
-            {filterTeams.length > 0
-              ? filterTeams.join(', ')
-              : activeCard ? CARDS.find(c => c.key === activeCard)?.label : 'Tous les bugs à trier'}
-          </span>
-          <span className="text-[12px] text-gray-400 font-mono">{total.toLocaleString('fr-FR')} bug{total !== 1 ? 's' : ''}</span>
-        </div>
 
         {error && <div className="p-6 text-center text-red-600 text-sm">{error}</div>}
 
@@ -621,9 +649,17 @@ export default function Triage() {
               onChange={e => setBulkValue(e.target.value)}
               className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 shrink-0 max-w-[190px]"
             >
-              {areaPaths.map(p => (
-                <option key={p} value={p}>{areaPathLabel(p)}</option>
-              ))}
+              <optgroup label="Équipes">
+                {REAL_TEAMS.map(t => {
+                  const p = teamAreaPath(t);
+                  return <option key={p} value={p}>{t}</option>;
+                })}
+              </optgroup>
+              <optgroup label="Zone">
+                {areaPaths.filter(p => !isTeamAreaPath(p) && !isObsoleteTeamAreaPath(p)).map(p => (
+                  <option key={p} value={p}>{areaPathLabel(p)}</option>
+                ))}
+              </optgroup>
             </select>
           ) : (
             <input

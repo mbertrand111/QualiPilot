@@ -15,13 +15,14 @@ router.post('/conformity/run', (_req, res) => {
 });
 
 const VIOLATION_SORTABLE: Record<string, string> = {
-  bug_id:            'b.id',
-  team:              'b.team',
-  state:             'b.state',
-  priority:          'b.priority',
+  bug_id:          'b.id',
+  team:            'b.team',
+  state:           'b.state',
+  priority:        'b.priority',
+  resolved_reason: 'b.resolved_reason',
   version_souhaitee: 'b.version_souhaitee',
   integration_build: 'b.integration_build',
-  changed_date:      'b.changed_date',
+  changed_date:    'b.changed_date',
 };
 
 // GET /api/conformity/violations
@@ -32,6 +33,11 @@ router.get('/conformity/violations', (req, res) => {
   const teams     = typeof req.query.team      === 'string' && req.query.team      ? req.query.team.split(',').filter(Boolean)      : [];
   const codes     = typeof req.query.rule_code === 'string' && req.query.rule_code ? req.query.rule_code.split(',').filter(Boolean) : [];
   const states    = typeof req.query.state     === 'string' && req.query.state     ? req.query.state.split(',').filter(Boolean)     : [];
+  const sprints   = typeof req.query.sprint    === 'string' && req.query.sprint    ? req.query.sprint.split(',').filter(Boolean)    : [];
+
+  const validBugTypes = new Set(['live', 'onpremise', 'hors_version', 'uncategorized']);
+  const bugTypes  = typeof req.query.bug_type  === 'string' && req.query.bug_type
+    ? req.query.bug_type.split(',').filter(v => validBugTypes.has(v)) : [];
   const bugIdRaw  = typeof req.query.bug_id    === 'string' && req.query.bug_id    ? parseInt(req.query.bug_id, 10)                 : null;
   const bugId     = bugIdRaw !== null && !isNaN(bugIdRaw) ? bugIdRaw : null;
 
@@ -54,10 +60,14 @@ router.get('/conformity/violations', (req, res) => {
 
   if (bugId !== null) { baseConditions.push('v.bug_id = ?'); baseParams.push(bugId); }
 
-  if (teams.length === 1)   { baseConditions.push('b.team = ?');                                     baseParams.push(teams[0]); }
-  else if (teams.length > 1){ baseConditions.push(`b.team IN (${teams.map(() => '?').join(',')})`);  baseParams.push(...teams); }
-  if (states.length === 1)   { baseConditions.push('b.state = ?');                                    baseParams.push(states[0]); }
+  if (teams.length === 1)    { baseConditions.push('b.team = ?');                                      baseParams.push(teams[0]); }
+  else if (teams.length > 1) { baseConditions.push(`b.team IN (${teams.map(() => '?').join(',')})`);   baseParams.push(...teams); }
+  if (states.length === 1)   { baseConditions.push('b.state = ?');                                     baseParams.push(states[0]); }
   else if (states.length > 1){ baseConditions.push(`b.state IN (${states.map(() => '?').join(',')})`); baseParams.push(...states); }
+  if (sprints.length === 1)   { baseConditions.push('b.sprint = ?');                                    baseParams.push(sprints[0]); }
+  else if (sprints.length > 1){ baseConditions.push(`b.sprint IN (${sprints.map(() => '?').join(',')})`); baseParams.push(...sprints); }
+  if (bugTypes.length === 1)   { baseConditions.push('classify_bug(b.version_souhaitee, b.found_in) = ?');                                              baseParams.push(bugTypes[0]); }
+  else if (bugTypes.length > 1){ baseConditions.push(`classify_bug(b.version_souhaitee, b.found_in) IN (${bugTypes.map(() => '?').join(',')})`);        baseParams.push(...bugTypes); }
 
   if (titleContains)   { baseConditions.push('b.title LIKE ?');             baseParams.push(`%${titleContains}%`); }
   if (versionContains) { baseConditions.push('b.version_souhaitee LIKE ?'); baseParams.push(`%${versionContains}%`); }
@@ -108,6 +118,7 @@ router.get('/conformity/violations', (req, res) => {
       b.version_souhaitee AS bug_version_souhaitee,
       b.integration_build AS bug_integration_build,
       b.found_in AS bug_found_in,
+      b.resolved_reason AS bug_resolved_reason,
       b.changed_date AS bug_changed_date
     ${joins} ${where}
     GROUP BY b.id
