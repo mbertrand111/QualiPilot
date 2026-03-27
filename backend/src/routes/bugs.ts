@@ -21,6 +21,7 @@ router.get('/bugs', (req, res) => {
   const sprint_done = typeof req.query.sprint_done === 'string' ? req.query.sprint_done : null;
 
   // Filtres "contient"
+  const id_contains       = typeof req.query.id       === 'string' ? req.query.id.trim()       : null;
   const title_contains    = typeof req.query.title    === 'string' ? req.query.title.trim()    : null;
   const version_contains  = typeof req.query.version  === 'string' ? req.query.version.trim()  : null;
   const found_in_contains = typeof req.query.found_in === 'string' ? req.query.found_in.trim() : null;
@@ -46,6 +47,7 @@ router.get('/bugs', (req, res) => {
   if (sprints.length === 1) { conditions.push('sprint = ?');                                 params.push(sprints[0]); }
   else if (sprints.length > 1){ conditions.push(`sprint IN (${sprints.map(() => '?').join(',')})`); params.push(...sprints); }
   if (sprint_done) { conditions.push('sprint_done = ?');                    params.push(sprint_done); }
+  if (id_contains)       { conditions.push("CAST(id AS TEXT) LIKE ?");      params.push(`%${id_contains}%`); }
   if (title_contains)    { conditions.push('title LIKE ?');                 params.push(`%${title_contains}%`); }
   if (version_contains)  { conditions.push('version_souhaitee LIKE ?');     params.push(`%${version_contains}%`); }
   if (found_in_contains) { conditions.push('found_in LIKE ?');              params.push(`%${found_in_contains}%`); }
@@ -108,6 +110,17 @@ router.get('/bugs/meta/areas', (_req, res) => {
   res.json(rows.map(r => r.area_path));
 });
 
+// GET /api/bugs/meta/iterations — iteration paths distincts du cache (pour autocomplétion)
+router.get('/bugs/meta/iterations', (_req, res) => {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT DISTINCT iteration_path FROM bugs_cache
+    WHERE iteration_path IS NOT NULL
+    ORDER BY iteration_path DESC
+  `).all() as { iteration_path: string }[];
+  res.json(rows.map(r => r.iteration_path));
+});
+
 // GET /api/bugs/meta/sprints
 router.get('/bugs/meta/sprints', (_req, res) => {
   const db = getDb();
@@ -149,7 +162,7 @@ router.get('/bugs/:id', (req, res) => {
     SELECT
       id, title, state, priority, team, area_path, iteration_path, sprint, sprint_done,
       found_in, integration_build, version_souhaitee, resolved_reason,
-      raison_origine, assigned_to, created_date, resolved_date, changed_date,
+      raison_origine, assigned_to, created_by, created_date, resolved_date, closed_date, changed_date,
       filiere, raw_json, last_synced_at
     FROM bugs_cache WHERE id = ?
   `).get(id);

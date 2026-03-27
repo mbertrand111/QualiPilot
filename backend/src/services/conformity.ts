@@ -12,6 +12,7 @@ export interface BugRow {
   integration_build: string | null;
   version_souhaitee: string | null;
   resolved_reason: string | null;
+  created_date: string | null;
 }
 
 interface RuleRow {
@@ -49,8 +50,8 @@ const VERSIONS_HORS       = `${CORRIGER_PREFIX}Hors versions`;
 const DEFAULT_VALID_BUILD_PREFIXES = [
   '12.80', '13.85.', '13.86.', '13.87.', '14.49.', '14.50.', '14.59.', '14.99',
   '15.00', '17.11', '17.20', '24.19', '24.20', '24.21', '24.30',
-  '25.01', '25.10.001', '25.19.0', '25.20.001', '25.20.002', '25.21.0',
-  '25.30.002', '25.30.005', '25.30.008', '25.31.0', '26.10.001', '26.11.0',
+  '25.01', '25.10.001', '25.14.0', '25.15.001', '25.19.0', '25.20.001', '25.20.002', '25.21.0',
+  '25.15.002', '25.30.002', '25.30.005', '25.30.007', '25.30.008', '25.31.0', '26.10.001', '26.11.0',
   'CO', 'Isacuve Web', 'Isasite', 'Outil Jbeg',
 ];
 
@@ -65,9 +66,15 @@ function t(v: string | null | undefined): string {
 }
 
 function isValidFahVersionFormat(v: string): boolean {
-  const m = v.match(/^FAH_(\d{2})\.(\d+)$/);
+  // Format standard : FAH_xx.yy — yy doit être multiple de 5
+  const m = v.match(/^FAH_(\d{2})\.(\d+)(?:\s+Patch\s+\d+)?$/i);
   if (!m) return false;
-  return parseInt(m[2], 10) % 10 === 0;
+  return parseInt(m[2], 10) % 5 === 0;
+}
+
+function isValidOnPremisePatchFormat(v: string): boolean {
+  // Format Patch OnPremise : "13.87.xxx Patch N" — le numéro est obligatoire
+  return /^\d+\.\d+\.\d+\s+Patch\s+\d+$/i.test(v);
 }
 
 function foundInYear(foundIn: string): number | null {
@@ -84,6 +91,10 @@ function isOnPremiseBug(foundIn: string): boolean {
   if (foundIn.startsWith('12.')) return true;
   if (foundIn.startsWith('13.') && !foundIn.startsWith('13.99')) return true;
   return false;
+}
+
+function isRequalifiedToLive(foundIn: string): boolean {
+  return /\/\s*live/i.test(foundIn);
 }
 
 // ─── Rule Evaluators ──────────────────────────────────────────────────────────
@@ -106,6 +117,7 @@ export function evalIntegrationBuildNotEmptied(bug: BugRow): boolean {
  * 3. Bug LIVE dans "Versions historiques" → incohérent
  * 4. Bug OnPremise dans "Versions LIVE" → incohérent
  * 5. Bug "Hors version" hors du dossier "Hors versions" → incohérent
+ * 6. Bug OnPremise avec version souhaitée Live (FAH_xx.yy) sans requalification → incohérent
  */
 export function evalTriageAreaCheck(bug: BugRow): boolean {
   const area  = t(bug.area_path);
@@ -128,7 +140,7 @@ export function evalTriageAreaCheck(bug: BugRow): boolean {
   if (area.startsWith(CORRIGER_PREFIX)) {
     const foundIn = t(bug.found_in);
     if (isLiveBug(foundIn) && area.startsWith(VERSIONS_HISTORIQUES)) return true;
-    if (isOnPremiseBug(foundIn) && area.startsWith(VERSIONS_LIVE)) return true;
+    if (isOnPremiseBug(foundIn) && !isRequalifiedToLive(foundIn) && area.startsWith(VERSIONS_LIVE)) return true;
     if (v === 'Non concerné' && !area.startsWith(VERSIONS_HORS)) return true;
   }
 
@@ -162,14 +174,22 @@ export function evalVersionCheck(bug: BugRow): boolean {
   const v = t(bug.version_souhaitee);
   if (!v) return false; // vide = OK pour ce check
   if (VERSION_SPECIAL_OK.has(v)) return false;
+  if (v.includes('Isasite')) return false;
 
   const foundIn = t(bug.found_in);
   if (!foundIn) return false; // sans found_in on ne peut pas déterminer le type → skip
 
-  if (isLiveBug(foundIn)) {
+  if (isLiveBug(foundIn) || isRequalifiedToLive(foundIn)) {
     return !isValidFahVersionFormat(v);
   }
   if (isOnPremiseBug(foundIn)) {
+    // Un format FAH valide est accepté même sur un bug OnPremise
+    // (la cohérence cross-produit est vérifiée par TRIAGE_AREA_CHECK)
+    if (isValidFahVersionFormat(v)) return false;
+    // Format Patch OnPremise valide : "13.87.xxx Patch N" — cohérence vérifiée par VERSION_BUILD_COHERENCE
+    if (isValidOnPremisePatchFormat(v)) return false;
+    // Autre usage de mots-clés patch/hotfix → format invalide
+    if (/\b(patch|hotfix)\b/i.test(v)) return true;
     return !v.startsWith('12.') && !v.startsWith('13.8');
   }
   return false; // type inconnu → pas d'erreur
@@ -178,8 +198,23 @@ export function evalVersionCheck(bug: BugRow): boolean {
 /** BUILD_CHECK — bugs Closed/Resolved doivent avoir un build valide */
 export function evalBuildCheck(bug: BugRow, rawConfig: string): boolean {
   if (!CLOSED_STATES.has(t(bug.state))) return false;
-  const b = t(bug.integration_build);
-  if (!b) return true; // build vide → violation
+  const raw = t(bug.integration_build);
+  // "Build non renseigné*" (placeholder ADO) = équivalent à vide
+  const b = raw.toLowerCase().startsWith('build non renseigné') ? '' : raw;
+  if (!b) {
+    // Build vide accepté pour les bugs créés avant le 01/01/2025
+    if (bug.created_date && bug.created_date < '2025-01-01') return false;
+    return true; // violation sinon
+  }
+  if (b === '-' || b === 'Non concerné') return false; // valeurs explicitement acceptées
+
+  // Build ne doit jamais contenir de mots-clés informels (patch, hotfix…) — format invalide
+  if (/\b(patch|hotfix|fix|rc|beta|alpha)\b/i.test(b)) return true;
+
+  // Bugs anciens (avant 2025) : 13.85 et 13.86 acceptés (valeur exacte ou préfixe)
+  if (bug.created_date && bug.created_date < '2025-01-01') {
+    if (b.startsWith('13.85') || b.startsWith('13.86')) return false;
+  }
 
   let extraPrefixes: string[] = [];
   try {
@@ -192,21 +227,29 @@ export function evalBuildCheck(bug: BugRow, rawConfig: string): boolean {
 }
 
 /**
- * VERSION_BUILD_COHERENCE — cohérence entre version souhaitée et build (règle partielle)
+ * VERSION_BUILD_COHERENCE — cohérence entre version souhaitée, build et found_in
+ * - Found In OnPremise + version souhaitée Live (FAH_xx.yy) sans requalification → incohérent (tous états)
  * - "Non concerné" dans les deux → OK
  * - Format Patch : "FAH_XX.YY Patch N" → build doit être "XX.YY.ZZZ-N"
  */
 export function evalVersionBuildCoherence(bug: BugRow): boolean {
+  const foundIn = t(bug.found_in);
+  const v       = t(bug.version_souhaitee);
+
+  // Incohérence produit : found_in OnPremise + version souhaitée Live, sans requalification "/ live"
+  // S'applique à tous les états (pas uniquement Closed)
+  if (foundIn && v && isOnPremiseBug(foundIn) && !isRequalifiedToLive(foundIn) && isValidFahVersionFormat(v)) return true;
+
+  // Les vérifications suivantes s'appliquent uniquement aux bugs fermés
   if (!CLOSED_STATES.has(t(bug.state))) return false;
 
-  const v = t(bug.version_souhaitee);
   const b = t(bug.integration_build);
   if (!v || !b) return false; // géré par autres règles
 
   // Les deux "Non concerné" → OK
   if (v === 'Non concerné' && b === 'Non concerné') return false;
 
-  // Format Patch : "FAH_XX.YY Patch N"
+  // Format Patch FAH : "FAH_XX.YY Patch N" → build doit commencer par XX.YY. et finir par -N
   const patchMatch = v.match(/^FAH_(\d{2})\.(\d+)\s+Patch\s+(\d+)$/i);
   if (patchMatch) {
     const year     = patchMatch[1];
@@ -215,7 +258,20 @@ export function evalVersionBuildCoherence(bug: BugRow): boolean {
     return !(b.startsWith(`${year}.${minor}.`) && b.endsWith(`-${patchNum}`));
   }
 
-  return false; // autres cas : règle à compléter, pas d'erreur pour l'instant
+  // Format Patch OnPremise : "13.87.xxx Patch N" → build doit commencer par "13.87.xxx" et finir par "-N"
+  const onpremisePatchMatch = v.match(/^(\d+\.\d+\.\d+)\s+Patch\s+(\d+)$/i);
+  if (onpremisePatchMatch) {
+    const base     = onpremisePatchMatch[1]; // ex: "13.87.150"
+    const patchNum = onpremisePatchMatch[2]; // ex: "1"
+    return !(b.startsWith(base) && b.endsWith(`-${patchNum}`));
+  }
+
+  // Réciproque : build a un indicateur patch (mot "Patch" ou suffixe "-N") mais la version n'en a pas
+  // Ex: build "26.10.001-2" ou "26.10.001 Patch 2" avec version "FAH_26.10" → violation
+  const buildHasPatch = /\bpatch\b/i.test(b) || /-\d+$/.test(b);
+  if (buildHasPatch && !/\bpatch\b/i.test(v)) return true;
+
+  return false;
 }
 
 // ─── Rule Dispatcher ──────────────────────────────────────────────────────────
@@ -242,7 +298,7 @@ export function runConformityCheck(): ConformityCheckResult {
 
   const bugs = db.prepare(`
     SELECT id, state, priority, area_path, found_in, integration_build,
-           version_souhaitee, resolved_reason
+           version_souhaitee, resolved_reason, created_date
     FROM bugs_cache
   `).all() as BugRow[];
 

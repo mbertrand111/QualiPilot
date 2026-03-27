@@ -12,7 +12,9 @@
       "Bash(npm run:*)",
       "Bash(npx tsc:*)",
       "Bash(ls /c/_git/QualiPilot/*.db)",
-      "Bash(ls /c/_git/QualiPilot/backend/*.db)"
+      "Bash(ls /c/_git/QualiPilot/backend/*.db)",
+      "Bash(npm --prefix frontend run lint)",
+      "Bash(npm --prefix backend run lint)"
     ]
   }
 }

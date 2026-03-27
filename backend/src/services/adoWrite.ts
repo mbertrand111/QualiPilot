@@ -14,19 +14,34 @@ interface FieldDef {
   validate: (v: unknown) => boolean;
 }
 
+// Normalisation des noms d'équipes (même logique que sync.ts)
+const TEAM_NAME_NORMALIZE: Record<string, string> = {
+  'GO_FAHST':      'GO FAHST',
+  'MELI_MELO':     'MELI MELO',
+  'MAGIC_SYSTEM':  'MAGIC SYSTEM',
+  'JURASSIC_BACK': 'JURASSIC BACK',
+  'NULL_REF':      'NULL.REF',
+  'NULL REF':      'NULL.REF',
+};
+
+function normalizeTeamName(raw: string): string {
+  return TEAM_NAME_NORMALIZE[raw] ?? raw;
+}
+
 // Zones ADO autorisées pour le déplacement de bugs
+// Les valeurs utilisent les vrais chemins ADO (avec underscores pour certaines équipes).
 export const ALLOWED_AREA_PATHS: Record<string, string> = {
   // Zones de triage
   'Bugs à prioriser':          'Isagri_Dev_GC_GestionCommerciale\\Bugs à prioriser',
   'À corriger — Live':         'Isagri_Dev_GC_GestionCommerciale\\Bugs à corriger\\Versions LIVE',
   'À corriger — OnPremise':    'Isagri_Dev_GC_GestionCommerciale\\Bugs à corriger\\Versions historiques',
   'À corriger — Hors version': 'Isagri_Dev_GC_GestionCommerciale\\Bugs à corriger\\Hors versions',
-  // Équipes
+  // Équipes — clés = noms canoniques affichés, valeurs = vrais chemins ADO
   'COCO':          'Isagri_Dev_GC_GestionCommerciale\\COCO',
-  'GO FAHST':      'Isagri_Dev_GC_GestionCommerciale\\GO FAHST',
-  'JURASSIC BACK': 'Isagri_Dev_GC_GestionCommerciale\\JURASSIC BACK',
-  'MAGIC SYSTEM':  'Isagri_Dev_GC_GestionCommerciale\\MAGIC SYSTEM',
-  'MELI MELO':     'Isagri_Dev_GC_GestionCommerciale\\MELI MELO',
+  'GO FAHST':      'Isagri_Dev_GC_GestionCommerciale\\GO_FAHST',
+  'JURASSIC BACK': 'Isagri_Dev_GC_GestionCommerciale\\JURASSIC_BACK',
+  'MAGIC SYSTEM':  'Isagri_Dev_GC_GestionCommerciale\\MAGIC_SYSTEM',
+  'MELI MELO':     'Isagri_Dev_GC_GestionCommerciale\\MELI_MELO',
   'NULL.REF':      'Isagri_Dev_GC_GestionCommerciale\\NULL.REF',
   'PIXELS':        'Isagri_Dev_GC_GestionCommerciale\\PIXELS',
   'LACE':          'Isagri_Dev_GC_GestionCommerciale\\LACE',
@@ -34,7 +49,7 @@ export const ALLOWED_AREA_PATHS: Record<string, string> = {
 
 const ALLOWED_AREA_PATH_VALUES = new Set(Object.values(ALLOWED_AREA_PATHS));
 
-// Dérive le nom d'équipe depuis l'area path (miroir de sync.ts)
+// Dérive le nom d'équipe canonique depuis l'area path (miroir de sync.ts)
 function deriveTeamFromAreaPath(areaPath: string): string | null {
   const parts = areaPath.split('\\');
   if (parts.length < 2) return null;
@@ -45,7 +60,7 @@ function deriveTeamFromAreaPath(areaPath: string): string | null {
     if (sub === 'Versions historiques') return 'Bugs à corriger OnPremise';
     return `Bugs à corriger ${sub}`;
   }
-  return level1;
+  return normalizeTeamName(level1);
 }
 
 export const WRITABLE_FIELDS: Record<string, FieldDef> = {
@@ -53,6 +68,11 @@ export const WRITABLE_FIELDS: Record<string, FieldDef> = {
     ado_ref:      'Microsoft.VSTS.Common.Priority',
     cache_column: 'priority',
     validate:     (v) => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 4,
+  },
+  found_in: {
+    ado_ref:      'Microsoft.VSTS.Build.FoundIn',
+    cache_column: 'found_in',
+    validate:     (v) => typeof v === 'string' && (v as string).length <= 255,
   },
   integration_build: {
     ado_ref:      'Microsoft.VSTS.Build.IntegrationBuild',
@@ -64,11 +84,35 @@ export const WRITABLE_FIELDS: Record<string, FieldDef> = {
     cache_column: 'version_souhaitee',
     validate:     (v) => typeof v === 'string' && (v as string).length <= 255,
   },
+  resolved_reason: {
+    ado_ref:      CUSTOM_FIELD_REFS.resolvedReason,
+    cache_column: 'resolved_reason',
+    validate:     (v) => typeof v === 'string' && (v as string).length <= 255,
+  },
+  raison_origine: {
+    ado_ref:      CUSTOM_FIELD_REFS.raisonOrigine,
+    cache_column: 'raison_origine',
+    validate:     (v) => typeof v === 'string' && (v as string).length <= 255,
+  },
   area_path: {
     ado_ref:      'System.AreaPath',
     cache_column: 'area_path',
-    // Valide que c'est une string non-vide commençant par le projet ADO connu
     validate:     (v) => typeof v === 'string' && (v as string).startsWith('Isagri_Dev_GC_GestionCommerciale\\') && (v as string).length <= 500,
+  },
+  assigned_to: {
+    ado_ref:      'System.AssignedTo',
+    cache_column: 'assigned_to',
+    validate:     (v) => typeof v === 'string' && (v as string).length <= 255,
+  },
+  iteration_path: {
+    ado_ref:      'System.IterationPath',
+    cache_column: 'iteration_path',
+    validate:     (v) => typeof v === 'string' && (v as string).startsWith('Isagri_Dev_GC_GestionCommerciale\\') && (v as string).length <= 500,
+  },
+  sprint_done: {
+    ado_ref:      CUSTOM_FIELD_REFS.sprintDone,
+    cache_column: 'sprint_done',
+    validate:     (v) => typeof v === 'string' && (v as string).length <= 255,
   },
 } as const;
 
@@ -109,7 +153,38 @@ async function adoPatch(workItemId: number, adoRef: string, value: unknown): Pro
   }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new AdoError(`ADO write failed: ${res.status} ${res.statusText} — ${body}`, res.status);
+    // Extraire les erreurs de validation ADO (ex: champ requis non rempli)
+    try {
+      const json = JSON.parse(body) as {
+        message?: string;
+        customProperties?: {
+          RuleValidationErrors?: Array<{ errorMessage?: string }>;
+          ErrorMessage?: string;
+        };
+        FieldRuleValidationErrors?: Array<{ errorMessage?: string }>;
+      };
+      const stripTf = (s: string) => s.replace(/^TF\d+:\s*/i, '').trim();
+
+      // Structure RuleValidationException (400 avec customProperties.RuleValidationErrors)
+      const ruleErrs = json.customProperties?.RuleValidationErrors;
+      if (Array.isArray(ruleErrs) && ruleErrs.length > 0) {
+        const msgs = ruleErrs.map(e => stripTf(e.errorMessage ?? '')).filter(Boolean).join(' ; ');
+        if (msgs) throw new AdoError(msgs, res.status);
+      }
+
+      // Structure alternative (FieldRuleValidationErrors à la racine)
+      const fieldErrs = json.FieldRuleValidationErrors;
+      if (Array.isArray(fieldErrs) && fieldErrs.length > 0) {
+        const msgs = fieldErrs.map(e => stripTf(e.errorMessage ?? '')).filter(Boolean).join(' ; ');
+        if (msgs) throw new AdoError(msgs, res.status);
+      }
+
+      // Repli : message de haut niveau
+      if (json.message) throw new AdoError(stripTf(json.message), res.status);
+    } catch (e) {
+      if (e instanceof AdoError) throw e;
+    }
+    throw new AdoError(`ADO write failed: ${res.status} ${res.statusText}`, res.status);
   }
 }
 
@@ -148,6 +223,17 @@ export async function writeField(
     if (field === 'area_path') {
       const team = deriveTeamFromAreaPath(value as string);
       db.prepare(`UPDATE bugs_cache SET team = ? WHERE id = ?`).run(team, bugId);
+    }
+    // Re-dérive sprint quand iteration_path change
+    if (field === 'iteration_path') {
+      const ip = value as string;
+      const sprintMatch = ip.match(/PI\d+(?:-SP\d+)?$/);
+      if (sprintMatch) {
+        const s = sprintMatch[0];
+        const exerciseMatch = ip.match(/(\d{4}-\d{4})/);
+        const sprint = /archive/i.test(ip) ? `Archive · ${s}` : exerciseMatch ? `${exerciseMatch[1]} · ${s}` : s;
+        db.prepare(`UPDATE bugs_cache SET sprint = ? WHERE id = ?`).run(sprint, bugId);
+      }
     }
     db.prepare(`
       INSERT INTO ado_write_audit (work_item_id, field, old_value, new_value, performed_at)

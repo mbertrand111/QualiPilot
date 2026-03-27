@@ -27,7 +27,7 @@ const CURRENT_RULES: { code: string; description: string; severity: string }[] =
   { code: 'CLOSED_BUG_COHERENCE',         description: 'Bug non-corrigé (Closed) → version & build doivent être "-"',             severity: 'error' },
   { code: 'VERSION_CHECK',               description: 'Format version souhaitée valide selon le type de bug (FAH_ / 12. / 13.8)', severity: 'error' },
   { code: 'BUILD_CHECK',                 description: 'Bugs Closed/Resolved doivent avoir un build valide dans la liste connue',  severity: 'error' },
-  { code: 'VERSION_BUILD_COHERENCE',     description: 'Cohérence version souhaitée / build (Non concerné, format Patch)',         severity: 'error' },
+  { code: 'VERSION_BUILD_COHERENCE',     description: 'Cohérence version/build : found_in OnPremise+version Live, format Patch', severity: 'error' },
 ];
 
 // Re-dérive les valeurs sprint depuis iteration_path pour les bugs déjà en cache
@@ -39,6 +39,12 @@ function deriveSprintLabel(iterationPath: string): string | null {
   if (/archive/i.test(iterationPath)) return `Archive · ${sprint}`;
   const exerciseMatch = iterationPath.match(/(\d{4}-\d{4})/);
   return exerciseMatch ? `${exerciseMatch[1]} · ${sprint}` : sprint;
+}
+
+// Ajoute la colonne created_by si elle n'existe pas encore (migration non destructive)
+function migrateAddCreatedBy(db: Database.Database): void {
+  try { db.exec(`ALTER TABLE bugs_cache ADD COLUMN created_by TEXT`); } catch { /* déjà présente */ }
+  try { db.exec(`ALTER TABLE bugs_cache ADD COLUMN closed_date TEXT`); } catch { /* déjà présente */ }
 }
 
 function migrateSprintValues(db: Database.Database): void {
@@ -53,6 +59,23 @@ function migrateSprintValues(db: Database.Database): void {
     for (const row of rows) {
       update.run(deriveSprintLabel(row.iteration_path), row.id);
     }
+  })();
+}
+
+// Normalise les noms d'équipes dans bugs_cache (GO_FAHST → GO FAHST, etc.)
+// Idempotent : n'affecte que les lignes avec les anciennes valeurs.
+function migrateNormalizeTeamNames(db: Database.Database): void {
+  const renames: [string, string][] = [
+    ['GO_FAHST',      'GO FAHST'],
+    ['MELI_MELO',     'MELI MELO'],
+    ['MAGIC_SYSTEM',  'MAGIC SYSTEM'],
+    ['JURASSIC_BACK', 'JURASSIC BACK'],
+    ['NULL_REF',      'NULL.REF'],
+    ['NULL REF',      'NULL.REF'],
+  ];
+  const update = db.prepare(`UPDATE bugs_cache SET team = ? WHERE team = ?`);
+  db.transaction(() => {
+    for (const [old, canonical] of renames) update.run(canonical, old);
   })();
 }
 
@@ -96,7 +119,9 @@ export function getDb(): Database.Database {
   _db.exec(schema);
 
   migrateRules(_db);
+  migrateAddCreatedBy(_db);
   migrateSprintValues(_db);
+  migrateNormalizeTeamNames(_db);
 
   logger.info({ databasePath: config.databasePath }, 'Database initialized');
   return _db;

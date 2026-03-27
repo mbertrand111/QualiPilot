@@ -40,6 +40,7 @@ export function classifyBug(
 
   if (vs === 'Non concerné') return 'hors_version';
   if (/migration/i.test(fi)) return 'live';
+  if (/\/\s*live/i.test(fi)) return 'live'; // bug histo volontairement requalifié en live
 
   if (vs) {
     if (isLiveVersion(vs))      return 'live';

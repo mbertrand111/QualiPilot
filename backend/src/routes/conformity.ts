@@ -41,6 +41,7 @@ router.get('/conformity/violations', (req, res) => {
   const bugIdRaw  = typeof req.query.bug_id    === 'string' && req.query.bug_id    ? parseInt(req.query.bug_id, 10)                 : null;
   const bugId     = bugIdRaw !== null && !isNaN(bugIdRaw) ? bugIdRaw : null;
 
+  const idContains      = typeof req.query.id       === 'string' ? req.query.id.trim()       : null;
   const titleContains   = typeof req.query.title    === 'string' ? req.query.title.trim()    : null;
   const versionContains = typeof req.query.version  === 'string' ? req.query.version.trim()  : null;
   const foundInContains = typeof req.query.found_in === 'string' ? req.query.found_in.trim() : null;
@@ -69,6 +70,7 @@ router.get('/conformity/violations', (req, res) => {
   if (bugTypes.length === 1)   { baseConditions.push('classify_bug(b.version_souhaitee, b.found_in) = ?');                                              baseParams.push(bugTypes[0]); }
   else if (bugTypes.length > 1){ baseConditions.push(`classify_bug(b.version_souhaitee, b.found_in) IN (${bugTypes.map(() => '?').join(',')})`);        baseParams.push(...bugTypes); }
 
+  if (idContains)      { baseConditions.push("CAST(b.id AS TEXT) LIKE ?");  baseParams.push(`%${idContains}%`); }
   if (titleContains)   { baseConditions.push('b.title LIKE ?');             baseParams.push(`%${titleContains}%`); }
   if (versionContains) { baseConditions.push('b.version_souhaitee LIKE ?'); baseParams.push(`%${versionContains}%`); }
   if (foundInContains) { baseConditions.push('b.found_in LIKE ?');          baseParams.push(`%${foundInContains}%`); }

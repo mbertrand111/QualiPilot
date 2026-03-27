@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { MultiSelect } from '../components/MultiSelect';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -167,6 +167,7 @@ const ZONE_TEAM_LABELS: Record<string, string> = {
 
 export default function Triage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const [triageStats, setTriageStats] = useState<TriageStats | null>(null);
   const [activeCard, setActiveCard]   = useState<ActiveCard>(null);
@@ -194,6 +195,7 @@ export default function Triage() {
     const valid = ['live', 'onpremise', 'hors_version', 'uncategorized'];
     return bt ? bt.split(',').filter(v => valid.includes(v)) : [];
   });
+  const [filterId,       setFilterId]       = useState('');
   const [filterTitle,    setFilterTitle]    = useState('');
   const [filterVersion,  setFilterVersion]  = useState('');
   const [filterFoundIn,  setFilterFoundIn]  = useState('');
@@ -223,12 +225,13 @@ export default function Triage() {
     if (filterStates.length)   params.set('state',    filterStates.join(','));
     if (filterSprints.length)  params.set('sprint',   filterSprints.join(','));
     if (filterBugTypes.length) params.set('bug_type', filterBugTypes.join(','));
+    if (filterId)       params.set('id',       filterId);
     if (filterTitle)    params.set('title',    filterTitle);
     if (filterVersion)  params.set('version',  filterVersion);
     if (filterFoundIn)  params.set('found_in', filterFoundIn);
     if (filterBuild)    params.set('build',    filterBuild);
     fetch(`/api/stats/triage?${params}`).then(r => r.json()).then(setTriageStats).catch(() => {});
-  }, [filterStates, filterSprints, filterBugTypes, filterTitle, filterVersion, filterFoundIn, filterBuild]);
+  }, [filterStates, filterSprints, filterBugTypes, filterId, filterTitle, filterVersion, filterFoundIn, filterBuild]);
 
   useEffect(() => {
     fetch('/api/bugs/meta/sprints').then(r => r.json()).then(setSprints).catch(() => {});
@@ -244,6 +247,7 @@ export default function Triage() {
       if (!res.ok) throw new Error(`Erreur ${res.status}`);
       const result = await res.json();
       setSyncResult(result);
+      window.dispatchEvent(new CustomEvent('qualipilot:synced', { detail: { lastSyncAt: result.lastSyncAt } }));
       load(1);
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : 'Erreur inconnue');
@@ -284,6 +288,7 @@ export default function Triage() {
 
       if (filterSprints.length)  params.set('sprint',    filterSprints.join(','));
       if (filterBugTypes.length) params.set('bug_type',  filterBugTypes.join(','));
+      if (filterId)       params.set('id',       filterId);
       if (filterTitle)    params.set('title',    filterTitle);
       if (filterVersion)  params.set('version',  filterVersion);
       if (filterFoundIn)  params.set('found_in', filterFoundIn);
@@ -300,7 +305,7 @@ export default function Triage() {
     } finally {
       setLoading(false);
     }
-  }, [activeCard, filterTeams, filterZones, filterStates, filterSprints, filterBugTypes, filterTitle, filterVersion, filterFoundIn, filterBuild, sort, dir]);
+  }, [activeCard, filterTeams, filterZones, filterStates, filterSprints, filterBugTypes, filterId, filterTitle, filterVersion, filterFoundIn, filterBuild, sort, dir]);
 
   useEffect(() => { load(1); }, [load]);
 
@@ -322,7 +327,7 @@ export default function Triage() {
 
   function resetFilters() {
     setFilterTeams([]); setFilterZones([]); setFilterStates(DEFAULT_STATES); setFilterSprints([]); setFilterBugTypes([]);
-    setFilterTitle(''); setFilterVersion(''); setFilterFoundIn(''); setFilterBuild('');
+    setFilterId(''); setFilterTitle(''); setFilterVersion(''); setFilterFoundIn(''); setFilterBuild('');
   }
 
   // ─── Sélection ──────────────────────────────────────────────────────────────
@@ -377,7 +382,7 @@ export default function Triage() {
   // ─── Dérivés ────────────────────────────────────────────────────────────────
 
   const statesChanged = filterStates.length !== DEFAULT_STATES.length || filterStates.some(s => !DEFAULT_STATES.includes(s));
-  const hasFilters = filterTeams.length || filterZones.length || statesChanged || filterSprints.length || filterBugTypes.length || filterTitle || filterVersion || filterFoundIn || filterBuild;
+  const hasFilters = filterTeams.length || filterZones.length || statesChanged || filterSprints.length || filterBugTypes.length || filterId || filterTitle || filterVersion || filterFoundIn || filterBuild;
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
@@ -499,6 +504,7 @@ export default function Triage() {
         </div>
         <div className="flex flex-wrap gap-3">
           {([
+            { label: 'ID contient',                value: filterId,      set: setFilterId },
             { label: 'Titre contient',             value: filterTitle,   set: setFilterTitle },
             { label: 'Version souhaitée contient', value: filterVersion, set: setFilterVersion },
             { label: 'Trouvé dans contient',       value: filterFoundIn, set: setFilterFoundIn },
@@ -545,24 +551,29 @@ export default function Triage() {
                   <Th col="team"              label="Zone"              sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="priority"          label="Prio"              sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="found_in"          label="Trouvé dans"       sort={sort} dir={dir} onSort={handleSort} />
-                  <Th col="version_souhaitee" label="Version souhaitée" sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="integration_build" label="Build"             sort={sort} dir={dir} onSort={handleSort} />
+                  <Th col="version_souhaitee" label="Version souhaitée" sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="created_date"      label="Créé le"           sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="changed_date"      label="Modifié"           sort={sort} dir={dir} onSort={handleSort} />
+                  <th className="px-3 py-3 w-8" />
                 </tr>
               </thead>
               <tbody>
                 {loading && (
-                  <tr><td colSpan={11} className="px-4 py-10 text-center text-gray-400 text-sm">Chargement…</td></tr>
+                  <tr><td colSpan={12} className="px-4 py-10 text-center text-gray-400 text-sm">Chargement…</td></tr>
                 )}
                 {!loading && bugs.length === 0 && (
-                  <tr><td colSpan={11} className="px-4 py-10 text-center text-gray-400 text-sm">Aucun bug trouvé</td></tr>
+                  <tr><td colSpan={12} className="px-4 py-10 text-center text-gray-400 text-sm">Aucun bug trouvé</td></tr>
                 )}
                 {!loading && bugs.map(bug => {
                   const isSelected = selectedIds.has(bug.id);
                   return (
-                    <tr key={bug.id} className={`border-b border-gray-50 transition-colors ${isSelected ? 'bg-blue-50/50' : 'hover:bg-[#66D2DB]/5'}`}>
-                      <td className="px-4 py-3">
+                    <tr
+                      key={bug.id}
+                      className={`border-b border-gray-50 transition-colors cursor-pointer ${isSelected ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-[#66D2DB]/5'}`}
+                      onClick={() => navigate(`/conformity/${bug.id}?from=triage`)}
+                    >
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -570,7 +581,7 @@ export default function Triage() {
                           className="rounded border-gray-300 text-[#1E63B6] focus:ring-[#1E63B6]/30 cursor-pointer"
                         />
                       </td>
-                      <td className="px-4 py-3 font-mono text-[12px] text-[#1E63B6] font-semibold whitespace-nowrap">
+                      <td className="px-4 py-3 font-mono text-[12px] text-[#1E63B6] font-semibold whitespace-nowrap" onClick={e => e.stopPropagation()}>
                         <a href={`https://dev.azure.com/Isagri-Prod-Progiciels/Isagri_Dev_GC_GestionCommerciale/_workitems/edit/${bug.id}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
                           #{bug.id}
                         </a>
@@ -582,10 +593,15 @@ export default function Triage() {
                       <td className="px-4 py-3 text-gray-600 whitespace-nowrap text-[12px]">{bug.team ?? ''}</td>
                       <td className="px-4 py-3 font-mono text-[12px] text-gray-700 whitespace-nowrap text-center">{bug.priority ?? ''}</td>
                       <td className="px-4 py-3 font-mono text-[12px] text-gray-500 whitespace-nowrap">{bug.found_in ?? ''}</td>
-                      <td className="px-4 py-3 font-mono text-[12px] text-gray-700 whitespace-nowrap">{bug.version_souhaitee ?? ''}</td>
                       <td className="px-4 py-3 font-mono text-[12px] text-gray-500 whitespace-nowrap">{bug.integration_build ?? ''}</td>
+                      <td className="px-4 py-3 font-mono text-[12px] text-gray-700 whitespace-nowrap">{bug.version_souhaitee ?? ''}</td>
                       <td className="px-4 py-3 text-[12px] text-gray-400 whitespace-nowrap">{dateShort(bug.created_date)}</td>
                       <td className="px-4 py-3 text-[12px] text-gray-400 whitespace-nowrap">{dateShort(bug.changed_date)}</td>
+                      <td className="px-3 py-3 text-gray-300 group-hover:text-gray-400">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                        </svg>
+                      </td>
                     </tr>
                   );
                 })}

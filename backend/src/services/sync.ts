@@ -25,8 +25,24 @@ function getAssignedTo(value: unknown): string | null {
   return getString(value);
 }
 
+// Normalisation des noms d'équipes : ADO utilise parfois des underscores ou variantes
+// alors que l'application affiche des noms canoniques avec espaces/ponctuation.
+const TEAM_NAME_NORMALIZE: Record<string, string> = {
+  'GO_FAHST':      'GO FAHST',
+  'MELI_MELO':     'MELI MELO',
+  'MAGIC_SYSTEM':  'MAGIC SYSTEM',
+  'JURASSIC_BACK': 'JURASSIC BACK',
+  'NULL_REF':      'NULL.REF',
+  'NULL REF':      'NULL.REF',
+};
+
+function normalizeTeamName(raw: string): string {
+  return TEAM_NAME_NORMALIZE[raw] ?? raw;
+}
+
 // Extrait le nom d'équipe depuis l'area path
 // Ex: "Isagri_Dev_GC_GestionCommerciale\COCO" → "COCO"
+// Ex: "Isagri_Dev_GC_GestionCommerciale\GO_FAHST" → "GO FAHST"
 // Ex: "Isagri_Dev_GC_GestionCommerciale\Bugs à corriger\Versions LIVE" → "Bugs à corriger LIVE"
 // Ex: "Isagri_Dev_GC_GestionCommerciale\Bugs à corriger\Versions historiques" → "Bugs à corriger OnPremise"
 // Ex: "Isagri_Dev_GC_GestionCommerciale\Bugs à corriger\Hors versions" → "Bugs à corriger Hors versions"
@@ -45,7 +61,7 @@ function extractTeamFromAreaPath(areaPath: string | null): string | null {
     return `Bugs à corriger ${sub}`;
   }
 
-  return level1;
+  return normalizeTeamName(level1);
 }
 
 // Extrait le sprint depuis l'iteration path, préfixé par l'exercice ou "Archive"
@@ -78,6 +94,8 @@ function mapBug(item: AdoBug) {
     iteration_path:    iterationPath,
     sprint:            extractSprintFromIterationPath(iterationPath),
     assigned_to:       getAssignedTo(f['System.AssignedTo']),
+    created_by:        getAssignedTo(f['System.CreatedBy']),
+    closed_date:       getString(f['Microsoft.VSTS.Common.ClosedDate']),
     team:              extractTeamFromAreaPath(areaPath),
     filiere:           null,
     created_date:      getString(f['System.CreatedDate']),
@@ -102,13 +120,13 @@ export async function runSync(): Promise<{ synced: number; lastSyncAt: string }>
 
   const upsert = db.prepare(`
     INSERT INTO bugs_cache (
-      id, title, state, priority, area_path, iteration_path, sprint, assigned_to,
-      team, filiere, created_date, resolved_date, changed_date,
+      id, title, state, priority, area_path, iteration_path, sprint, assigned_to, created_by,
+      team, filiere, created_date, resolved_date, closed_date, changed_date,
       found_in, integration_build, version_souhaitee, resolved_reason, raison_origine, sprint_done,
       raw_json, last_synced_at
     ) VALUES (
-      @id, @title, @state, @priority, @area_path, @iteration_path, @sprint, @assigned_to,
-      @team, @filiere, @created_date, @resolved_date, @changed_date,
+      @id, @title, @state, @priority, @area_path, @iteration_path, @sprint, @assigned_to, @created_by,
+      @team, @filiere, @created_date, @resolved_date, @closed_date, @changed_date,
       @found_in, @integration_build, @version_souhaitee, @resolved_reason, @raison_origine, @sprint_done,
       @raw_json, @last_synced_at
     )
@@ -120,6 +138,8 @@ export async function runSync(): Promise<{ synced: number; lastSyncAt: string }>
       iteration_path    = excluded.iteration_path,
       sprint            = excluded.sprint,
       assigned_to       = excluded.assigned_to,
+      created_by        = excluded.created_by,
+      closed_date       = excluded.closed_date,
       team              = excluded.team,
       filiere           = excluded.filiere,
       created_date      = excluded.created_date,

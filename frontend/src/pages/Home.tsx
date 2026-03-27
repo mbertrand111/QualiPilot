@@ -71,7 +71,7 @@ export function Home() {
       if (!res.ok) throw new Error(`Erreur ${res.status}`);
       const result = await res.json();
       setSyncResult({ synced: result.synced });
-      window.dispatchEvent(new CustomEvent('qualipilot:synced'));
+      window.dispatchEvent(new CustomEvent('qualipilot:synced', { detail: { lastSyncAt: result.lastSyncAt } }));
       fetch('/api/stats/home').then(r => r.json()).then(setStats).catch(() => {});
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : 'Erreur inconnue');

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { MultiSelect } from '../components/MultiSelect';
@@ -6,11 +6,11 @@ import { ConfirmModal } from '../components/ConfirmModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Severity = 'error' | 'warning';
 type SortDir = 'asc' | 'desc';
-type WritableField = 'priority' | 'version_souhaitee' | 'integration_build' | 'area_path';
+type WritableField = 'priority' | 'found_in' | 'version_souhaitee' | 'integration_build' | 'area_path';
 
 interface Violation {
+  id: number;
   bug_id: number;
   bug_title: string | null;
   bug_state: string | null;
@@ -38,17 +38,17 @@ interface RunResult {
   runAt: string;
 }
 
-interface EditState {
-  bugId: number;
-  field: WritableField;
-  value: string;
+interface EditRowState {
+  editValues: Record<string, string>;
+  origValues: Record<string, string>;
 }
 
-interface ConfirmState {
+interface DirtyField {
   bugId: number;
-  field: WritableField;
-  value: unknown;
-  displayValue: string;
+  key: string;
+  label: string;
+  oldVal: string;
+  newVal: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -95,9 +95,17 @@ const ALL_RULES = [
 
 const FIELD_LABELS: Record<WritableField, string> = {
   priority:          'Priorité',
+  found_in:          'Trouvé dans',
   version_souhaitee: 'Version souhaitée',
   integration_build: 'Build',
   area_path:         'Zone',
+};
+
+const EDIT_FIELD_LABELS: Record<string, string> = {
+  priority:          'Priorité',
+  found_in:          'Trouvé dans',
+  integration_build: 'Build',
+  version_souhaitee: 'Version souhaitée',
 };
 
 const ADO_PROJECT = 'Isagri_Dev_GC_GestionCommerciale';
@@ -136,16 +144,15 @@ function isObsoleteTeamAreaPath(path: string): boolean {
   return OBSOLETE_TEAMS.has(suffix);
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-
-function RunIcon({ spinning }: { spinning: boolean }) {
-  return (
-    <svg className={`w-4 h-4 shrink-0 ${spinning ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  );
+function humanizeAdoError(raw: string): string {
+  return raw
+    .replace(/Rule Error for field ([^.]+)\.\s*Error code:\s*Required,\s*InvalidEmpty\.?/gi,
+      (_, field) => `Le champ "${field}" est requis et ne peut pas être vide.`)
+    .replace(/Rule Error for field ([^.]+)\.\s*Error code:\s*([^.]+)\.?/gi,
+      (_, field, code) => `Erreur sur le champ "${field}" (${code.trim()}).`);
 }
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   if (!active) return (
@@ -213,37 +220,36 @@ function dateShort(iso: string | null) {
 // ─── Editable Cell ────────────────────────────────────────────────────────────
 
 interface EditableCellProps {
-  bugId: number;
-  field: WritableField;
+  field: string;
   currentValue: string | number | null;
-  editing: boolean;
+  isRowEditing: boolean;
   editValue: string;
-  onStartEdit: (bugId: number, field: WritableField, value: string) => void;
+  isFocusField: boolean;
+  onStartEdit: () => void;
   onChangeValue: (value: string) => void;
-  onRequestSave: () => void;
-  onCancelEdit: () => void;
 }
 
-function EditableCell({ bugId, field, currentValue, editing, editValue, onStartEdit, onChangeValue, onRequestSave, onCancelEdit }: EditableCellProps) {
+function EditableCell({ field, currentValue, isRowEditing, editValue, isFocusField, onStartEdit, onChangeValue }: EditableCellProps) {
   const inputRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
 
   useEffect(() => {
-    if (editing) {
+    if (isRowEditing && isFocusField) {
       setTimeout(() => inputRef.current?.focus(), 0);
     }
-  }, [editing]);
+  }, [isRowEditing, isFocusField]);
 
-  const displayVal = currentValue !== null && currentValue !== undefined && currentValue !== '' ? String(currentValue) : '—';
+  const isEmpty = currentValue === null || currentValue === undefined || currentValue === '';
+  const displayVal = isEmpty ? '' : String(currentValue);
 
-  if (!editing) {
+  if (!isRowEditing) {
     return (
       <div
         className="group/cell flex items-center gap-1.5 cursor-pointer rounded-lg px-2 py-1 -mx-2 hover:bg-blue-50 transition-colors min-w-[80px]"
-        onClick={() => onStartEdit(bugId, field, currentValue !== null && currentValue !== undefined ? String(currentValue) : '')}
+        onClick={e => { e.stopPropagation(); onStartEdit(); }}
         title="Cliquer pour modifier"
       >
-        <span className={`text-xs font-mono ${currentValue !== null && currentValue !== '' ? 'text-gray-700' : 'text-gray-300'}`}>
-          {displayVal}
+        <span className={`text-xs font-mono ${isEmpty ? 'text-gray-200 italic' : 'text-gray-700'}`}>
+          {isEmpty ? 'vide' : displayVal}
         </span>
         <span className="text-gray-300 opacity-0 group-hover/cell:opacity-100 transition-opacity">
           <PencilIcon />
@@ -253,13 +259,14 @@ function EditableCell({ bugId, field, currentValue, editing, editValue, onStartE
   }
 
   return (
-    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+    <div onClick={e => e.stopPropagation()}>
       {field === 'priority' ? (
         <select
           ref={inputRef as React.RefObject<HTMLSelectElement>}
           value={editValue}
           onChange={e => onChangeValue(e.target.value)}
-          className="text-xs border border-[#1E63B6] rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/30 bg-white w-16"
+          onClick={e => e.stopPropagation()}
+          className="text-xs border border-amber-400 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-300/50 bg-amber-50 w-16"
         >
           <option value="">—</option>
           <option value="1">1</option>
@@ -273,29 +280,99 @@ function EditableCell({ bugId, field, currentValue, editing, editValue, onStartE
           type="text"
           value={editValue}
           onChange={e => onChangeValue(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') onRequestSave(); if (e.key === 'Escape') onCancelEdit(); }}
-          className="text-xs border border-[#1E63B6] rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/30 w-32"
-          placeholder="—"
+          onClick={e => e.stopPropagation()}
+          className="text-xs border border-amber-400 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-300/50 bg-amber-50 w-32"
+          placeholder="vide"
         />
       )}
-      <button
-        onClick={onRequestSave}
-        className="p-1 rounded-lg text-green-600 hover:bg-green-50 transition-colors"
-        title="Enregistrer"
-      >
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-        </svg>
-      </button>
-      <button
-        onClick={onCancelEdit}
-        className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
-        title="Annuler"
-      >
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
+    </div>
+  );
+}
+
+// ─── Inline Save Confirm Modal ────────────────────────────────────────────────
+
+interface SaveConfirmModalProps {
+  dirtyFields: DirtyField[];
+  loading: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function SaveConfirmModal({ dirtyFields, loading, onConfirm, onCancel }: SaveConfirmModalProps) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancel(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
+  const bugIds = [...new Set(dirtyFields.map(f => f.bugId))];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
+      <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-lg mx-4 p-6 max-h-[80vh] flex flex-col">
+        <div className="flex items-start gap-3 mb-5 shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-[15px] font-bold text-[#0e1a38]">Confirmer les modifications</h3>
+            <p className="text-sm text-gray-400 mt-0.5">
+              {bugIds.length} bug{bugIds.length > 1 ? 's' : ''} — {dirtyFields.length} champ{dirtyFields.length > 1 ? 's' : ''} modifié{dirtyFields.length > 1 ? 's' : ''}
+            </p>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 min-h-0 mb-5">
+          <table className="w-full text-sm border-collapse">
+            <thead className="sticky top-0 bg-white">
+              <tr className="border-b border-gray-100">
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide pb-2 pr-4">Bug</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide pb-2 pr-4">Champ</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide pb-2 pr-4">Avant</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide pb-2">Après</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dirtyFields.map((f, i) => (
+                <tr key={`${f.bugId}-${f.key}`} className="border-b border-gray-50">
+                  <td className="py-2 pr-4 font-mono text-[12px] text-[#1E63B6] font-semibold whitespace-nowrap">
+                    {i === 0 || dirtyFields[i - 1].bugId !== f.bugId ? `#${f.bugId}` : ''}
+                  </td>
+                  <td className="py-2 pr-4 text-gray-500 font-medium whitespace-nowrap">{f.label}</td>
+                  <td className="py-2 pr-4 font-mono text-[12px] text-gray-400 line-through">
+                    {f.oldVal || <span className="no-underline not-italic text-gray-300">vide</span>}
+                  </td>
+                  <td className="py-2 font-mono text-[12px] text-[#0e1a38] font-semibold">
+                    {f.newVal || <span className="not-italic font-normal text-gray-300">vide</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-xs text-gray-400 mb-4 shrink-0">Ces modifications seront appliquées directement dans Azure DevOps.</p>
+
+        <div className="flex gap-3 justify-end shrink-0">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-[#1E63B6] hover:bg-[#0F3E8A] disabled:opacity-50 disabled:cursor-wait"
+          >
+            {loading ? 'Enregistrement…' : 'Enregistrer dans ADO'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -321,6 +398,7 @@ export default function Conformity() {
   const [filterBugTypes, setFilterBugTypes] = useState<string[]>([]);
   const [filterRules,    setFilterRules]    = useState<string[]>([]);
   const [filterStates,   setFilterStates]   = useState<string[]>([]);
+  const [filterId,       setFilterId]       = useState('');
   const [filterTitle,    setFilterTitle]    = useState('');
   const [filterVersion,  setFilterVersion]  = useState('');
   const [filterFoundIn,  setFilterFoundIn]  = useState('');
@@ -342,11 +420,13 @@ export default function Conformity() {
   // Sélection multiple
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-  // Édition inline
-  const [editState, setEditState]   = useState<EditState | null>(null);
-  const [confirmEdit, setConfirmEdit] = useState<ConfirmState | null>(null);
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [saveError, setSaveError]   = useState<string | null>(null);
+  // Édition multi-champs multi-lignes
+  const [editRows,        setEditRows]        = useState<Record<number, EditRowState>>({});
+  const [focusBugId,      setFocusBugId]      = useState<number | null>(null);
+  const [focusField,      setFocusField]      = useState<string | null>(null);
+  const [showConfirmSave, setShowConfirmSave] = useState(false);
+  const [saving,          setSaving]          = useState(false);
+  const [saveError,       setSaveError]       = useState<string | null>(null);
 
   // Bulk action
   const [bulkField, setBulkField]   = useState<WritableField>('priority');
@@ -371,6 +451,7 @@ export default function Conformity() {
       if (filterBugTypes.length)  params.set('bug_type',  filterBugTypes.join(','));
       if (filterRules.length)     params.set('rule_code', filterRules.join(','));
       if (filterStates.length)    params.set('state',     filterStates.join(','));
+      if (filterId)               params.set('id',        filterId);
       if (filterTitle)            params.set('title',     filterTitle);
       if (filterVersion)          params.set('version',   filterVersion);
       if (filterFoundIn)          params.set('found_in',  filterFoundIn);
@@ -388,7 +469,7 @@ export default function Conformity() {
     } finally {
       setLoading(false);
     }
-  }, [filterTeams, filterZones, filterSprints, filterBugTypes, filterRules, filterStates, filterTitle, filterVersion, filterFoundIn, filterBuild, sort, dir]);
+  }, [filterTeams, filterZones, filterSprints, filterBugTypes, filterRules, filterStates, filterId, filterTitle, filterVersion, filterFoundIn, filterBuild, sort, dir]);
 
   useEffect(() => { load(1); }, [load]);
 
@@ -431,7 +512,7 @@ export default function Conformity() {
   function resetFilters() {
     setFilterTeams([]); setFilterZones([]); setFilterSprints([]); setFilterBugTypes([]);
     setFilterRules([]); setFilterStates([]);
-    setFilterTitle(''); setFilterVersion(''); setFilterFoundIn(''); setFilterBuild('');
+    setFilterId(''); setFilterTitle(''); setFilterVersion(''); setFilterFoundIn(''); setFilterBuild('');
   }
 
   // ─── Sélection ──────────────────────────────────────────────────────────────
@@ -456,41 +537,72 @@ export default function Conformity() {
     });
   }
 
-  // ─── Édition inline ─────────────────────────────────────────────────────────
+  // ─── Édition multi-champs multi-lignes ─────────────────────────────────────
 
-  function startEdit(bugId: number, field: WritableField, value: string) {
-    setEditState({ bugId, field, value });
+  const dirtyFields = useMemo((): DirtyField[] => {
+    const result: DirtyField[] = [];
+    for (const [bugIdStr, row] of Object.entries(editRows)) {
+      const bugId = Number(bugIdStr);
+      for (const key of Object.keys(row.editValues)) {
+        if (row.editValues[key] !== row.origValues[key]) {
+          result.push({ bugId, key, label: EDIT_FIELD_LABELS[key] ?? key, oldVal: row.origValues[key] ?? '', newVal: row.editValues[key] ?? '' });
+        }
+      }
+    }
+    return result;
+  }, [editRows]);
+
+  function cancelEdit() {
+    setEditRows({});
+    setFocusBugId(null);
+    setFocusField(null);
     setSaveError(null);
   }
 
-  function requestSave() {
-    if (!editState) return;
-    const { bugId, field, value } = editState;
-    const parsed = field === 'priority' ? parseInt(value, 10) : value;
-    const displayValue = field === 'priority' ? `Priorité → ${value}` : `${FIELD_LABELS[field]} → "${value}"`;
-    setConfirmEdit({ bugId, field, value: parsed, displayValue });
+  function enterEditRow(bugId: number, v: Violation, field: string) {
+    setEditRows(prev => {
+      if (prev[bugId]) return prev; // déjà en édition — ne pas réinitialiser les valeurs
+      const orig: Record<string, string> = {
+        priority:          v.bug_priority != null ? String(v.bug_priority) : '',
+        found_in:          v.bug_found_in ?? '',
+        integration_build: v.bug_integration_build ?? '',
+        version_souhaitee: v.bug_version_souhaitee ?? '',
+      };
+      return { ...prev, [bugId]: { editValues: { ...orig }, origValues: { ...orig } } };
+    });
+    setFocusBugId(bugId);
+    setFocusField(field);
+    setSaveError(null);
   }
 
-  async function confirmSave() {
-    if (!confirmEdit) return;
-    setSavingEdit(true);
+  function updateEditValue(bugId: number, key: string, val: string) {
+    setEditRows(prev => {
+      if (!prev[bugId]) return prev;
+      return { ...prev, [bugId]: { ...prev[bugId], editValues: { ...prev[bugId].editValues, [key]: val } } };
+    });
+  }
+
+  async function handleSave() {
+    if (dirtyFields.length === 0) return;
+    setSaving(true);
+    setSaveError(null);
     try {
-      const res = await fetch(`/api/bugs/${confirmEdit.bugId}/fields`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ field: confirmEdit.field, value: confirmEdit.value }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `Erreur ${res.status}`);
-      setConfirmEdit(null);
-      setEditState(null);
-      setSaveError(null);
+      for (const f of dirtyFields) {
+        const value = f.key === 'priority' ? parseInt(f.newVal, 10) : f.newVal;
+        const res = await fetch(`/api/bugs/${f.bugId}/fields`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ field: f.key, value }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(`Bug #${f.bugId} — ${humanizeAdoError(data.error ?? `Erreur ${res.status}`)}`);
+      }
+      cancelEdit();
       load(page);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Erreur inconnue');
-      setConfirmEdit(null);
     } finally {
-      setSavingEdit(false);
+      setSaving(false);
     }
   }
 
@@ -512,8 +624,20 @@ export default function Conformity() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids, field: bulkField, value }),
       });
-      const data = await res.json();
+      const data = await res.json() as { updated?: number; failed?: { bug_id: number; error: string }[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? `Erreur ${res.status}`);
+
+      const failed = data.failed ?? [];
+      if (failed.length > 0 && (data.updated ?? 0) === 0) {
+        // Tous les bugs ont échoué
+        const firstErr = humanizeAdoError(failed[0].error);
+        throw new Error(`Échec pour tous les bugs — Bug #${failed[0].bug_id} : ${firstErr}`);
+      }
+      if (failed.length > 0) {
+        // Échecs partiels — on affiche sans bloquer
+        setBulkError(`${data.updated} bug${(data.updated ?? 0) > 1 ? 's' : ''} mis à jour, ${failed.length} échec${failed.length > 1 ? 's' : ''} — Bug #${failed[0].bug_id} : ${humanizeAdoError(failed[0].error)}`);
+      }
+
       setConfirmBulk(false);
       setSelectedIds(new Set());
       load(page);
@@ -527,11 +651,10 @@ export default function Conformity() {
 
   // ─── Dérivés ────────────────────────────────────────────────────────────────
 
-  const hasFilters  = filterTeams.length || filterZones.length || filterSprints.length || filterBugTypes.length || filterRules.length || filterStates.length || filterTitle || filterVersion || filterFoundIn || filterBuild;
+  const hasFilters  = filterTeams.length || filterZones.length || filterSprints.length || filterBugTypes.length || filterRules.length || filterStates.length || filterId || filterTitle || filterVersion || filterFoundIn || filterBuild;
   const totalPages  = Math.ceil(total / LIMIT);
-
-
   const busy = syncEvalStep !== 'idle';
+
   const headerActions = (
     <button
       onClick={handleSyncAndEval}
@@ -573,14 +696,14 @@ export default function Conformity() {
         </div>
       )}
       {saveError && (
-        <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600">
-          Erreur lors de la sauvegarde : {saveError}
+        <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
+          <span>Erreur lors de la sauvegarde : {saveError}</span>
           <button onClick={() => setSaveError(null)} className="ml-2 text-red-400 hover:text-red-600">×</button>
         </div>
       )}
       {bulkError && (
-        <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600">
-          Erreur lors de la mise à jour groupée : {bulkError}
+        <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
+          <span>Erreur lors de la mise à jour groupée : {bulkError}</span>
           <button onClick={() => setBulkError(null)} className="ml-2 text-red-400 hover:text-red-600">×</button>
         </div>
       )}
@@ -647,6 +770,7 @@ export default function Conformity() {
         {/* Ligne 2 : champs texte contient */}
         <div className="flex flex-wrap gap-3">
           {([
+            { label: 'ID contient',                 value: filterId,      set: setFilterId },
             { label: 'Titre contient',              value: filterTitle,   set: setFilterTitle },
             { label: 'Version souhaitée contient',  value: filterVersion, set: setFilterVersion },
             { label: 'Trouvé dans contient',        value: filterFoundIn, set: setFilterFoundIn },
@@ -694,8 +818,8 @@ export default function Conformity() {
                   <Th col="priority"          label="Prio"             sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="found_in"          label="Trouvé dans"      sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="resolved_reason"   label="Raison"           sort={sort} dir={dir} onSort={handleSort} />
-                  <Th col="version_souhaitee" label="Version souhaitée" sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="integration_build" label="Build"            sort={sort} dir={dir} onSort={handleSort} />
+                  <Th col="version_souhaitee" label="Version souhaitée" sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="changed_date"      label="Modifié"          sort={sort} dir={dir} onSort={handleSort} />
                   <th className="w-6" />
                 </tr>
@@ -716,17 +840,20 @@ export default function Conformity() {
                   </tr>
                 )}
                 {!loading && violations.map(v => {
-                  const isSelected = selectedIds.has(v.bug_id);
-                  const isEditingPriority = editState?.bugId === v.bug_id && editState.field === 'priority';
-                  const isEditingVersion  = editState?.bugId === v.bug_id && editState.field === 'version_souhaitee';
-                  const isEditingBuild    = editState?.bugId === v.bug_id && editState.field === 'integration_build';
-                  const isEditing = isEditingPriority || isEditingVersion || isEditingBuild;
+                  const isSelected   = selectedIds.has(v.bug_id);
+                  const isRowEditing = v.bug_id in editRows;
+                  const rowEdit      = editRows[v.bug_id];
 
                   return (
                     <tr
                       key={v.id}
-                      onClick={() => !isEditing && navigate(`/conformity/${v.bug_id}`)}
-                      className={`border-b border-gray-50 group transition-colors ${isEditing ? '' : 'cursor-pointer'} ${isSelected ? 'bg-blue-50/50' : 'hover:bg-[#66D2DB]/5'}`}
+                      onClick={() => { if (!isRowEditing) navigate(`/conformity/${v.bug_id}`); }}
+                      className={[
+                        'border-b border-gray-50 group transition-colors',
+                        isRowEditing ? 'bg-amber-50/60 cursor-default' : 'cursor-pointer',
+                        isSelected && !isRowEditing ? 'bg-blue-50/50' : '',
+                        !isRowEditing && !isSelected ? 'hover:bg-[#66D2DB]/5' : '',
+                      ].join(' ')}
                     >
                       {/* Checkbox */}
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
@@ -764,53 +891,57 @@ export default function Conformity() {
                       <td className="px-4 py-3 text-gray-600 whitespace-nowrap text-[12px]">{v.bug_team ?? ''}</td>
 
                       {/* Prio — éditable */}
-                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <td className="px-4 py-3">
                         <EditableCell
-                          bugId={v.bug_id}
                           field="priority"
                           currentValue={v.bug_priority}
-                          editing={isEditingPriority}
-                          editValue={isEditingPriority ? editState.value : ''}
-                          onStartEdit={startEdit}
-                          onChangeValue={val => setEditState(s => s ? { ...s, value: val } : null)}
-                          onRequestSave={requestSave}
-                          onCancelEdit={() => setEditState(null)}
+                          isRowEditing={isRowEditing}
+                          editValue={isRowEditing ? (rowEdit.editValues['priority'] ?? '') : ''}
+                          isFocusField={focusBugId === v.bug_id && focusField === 'priority'}
+                          onStartEdit={() => enterEditRow(v.bug_id, v, 'priority')}
+                          onChangeValue={val => updateEditValue(v.bug_id, 'priority', val)}
                         />
                       </td>
 
-                      {/* Trouvé dans */}
-                      <td className="px-4 py-3 font-mono text-[12px] text-gray-500 whitespace-nowrap">{v.bug_found_in ?? ''}</td>
+                      {/* Trouvé dans — éditable */}
+                      <td className="px-4 py-3">
+                        <EditableCell
+                          field="found_in"
+                          currentValue={v.bug_found_in}
+                          isRowEditing={isRowEditing}
+                          editValue={isRowEditing ? (rowEdit.editValues['found_in'] ?? '') : ''}
+                          isFocusField={focusBugId === v.bug_id && focusField === 'found_in'}
+                          onStartEdit={() => enterEditRow(v.bug_id, v, 'found_in')}
+                          onChangeValue={val => updateEditValue(v.bug_id, 'found_in', val)}
+                        />
+                      </td>
 
                       {/* Raison */}
                       <td className="px-4 py-3 text-[12px] text-gray-500 whitespace-nowrap">{v.bug_resolved_reason ?? ''}</td>
 
-                      {/* Version souhaitée — éditable */}
-                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      {/* Build — éditable */}
+                      <td className="px-4 py-3">
                         <EditableCell
-                          bugId={v.bug_id}
-                          field="version_souhaitee"
-                          currentValue={v.bug_version_souhaitee}
-                          editing={isEditingVersion}
-                          editValue={isEditingVersion ? editState.value : ''}
-                          onStartEdit={startEdit}
-                          onChangeValue={val => setEditState(s => s ? { ...s, value: val } : null)}
-                          onRequestSave={requestSave}
-                          onCancelEdit={() => setEditState(null)}
+                          field="integration_build"
+                          currentValue={v.bug_integration_build}
+                          isRowEditing={isRowEditing}
+                          editValue={isRowEditing ? (rowEdit.editValues['integration_build'] ?? '') : ''}
+                          isFocusField={focusBugId === v.bug_id && focusField === 'integration_build'}
+                          onStartEdit={() => enterEditRow(v.bug_id, v, 'integration_build')}
+                          onChangeValue={val => updateEditValue(v.bug_id, 'integration_build', val)}
                         />
                       </td>
 
-                      {/* Build — éditable */}
-                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      {/* Version souhaitée — éditable */}
+                      <td className="px-4 py-3">
                         <EditableCell
-                          bugId={v.bug_id}
-                          field="integration_build"
-                          currentValue={v.bug_integration_build}
-                          editing={isEditingBuild}
-                          editValue={isEditingBuild ? editState.value : ''}
-                          onStartEdit={startEdit}
-                          onChangeValue={val => setEditState(s => s ? { ...s, value: val } : null)}
-                          onRequestSave={requestSave}
-                          onCancelEdit={() => setEditState(null)}
+                          field="version_souhaitee"
+                          currentValue={v.bug_version_souhaitee}
+                          isRowEditing={isRowEditing}
+                          editValue={isRowEditing ? (rowEdit.editValues['version_souhaitee'] ?? '') : ''}
+                          isFocusField={focusBugId === v.bug_id && focusField === 'version_souhaitee'}
+                          onStartEdit={() => enterEditRow(v.bug_id, v, 'version_souhaitee')}
+                          onChangeValue={val => updateEditValue(v.bug_id, 'version_souhaitee', val)}
                         />
                       </td>
 
@@ -854,8 +985,42 @@ export default function Conformity() {
         )}
       </div>
 
+      {/* ── Barre d'édition multi-lignes ─────────────────────────────────────── */}
+      {Object.keys(editRows).length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-amber-900 text-white rounded-2xl shadow-2xl border border-amber-800/50 px-5 py-3.5 flex items-center gap-4 min-w-[480px] max-w-2xl">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="w-6 h-6 rounded-full bg-amber-600 text-[11px] font-bold flex items-center justify-center">
+              {dirtyFields.length}
+            </span>
+            <span className="text-sm font-semibold">
+              {dirtyFields.length === 0
+                ? `${Object.keys(editRows).length} ligne${Object.keys(editRows).length > 1 ? 's' : ''} en cours de modification`
+                : `${dirtyFields.length} modification${dirtyFields.length > 1 ? 's' : ''} sur ${[...new Set(dirtyFields.map(f => f.bugId))].length} bug${[...new Set(dirtyFields.map(f => f.bugId))].length > 1 ? 's' : ''}`}
+            </span>
+          </div>
+
+          <div className="flex-1" />
+
+          <button
+            onClick={cancelEdit}
+            disabled={saving}
+            className="shrink-0 px-4 py-1.5 rounded-xl text-sm font-semibold border border-amber-700 hover:bg-amber-800 disabled:opacity-50 transition-colors"
+          >
+            Annuler
+          </button>
+
+          <button
+            onClick={() => setShowConfirmSave(true)}
+            disabled={saving || dirtyFields.length === 0}
+            className="shrink-0 px-4 py-1.5 rounded-xl text-sm font-semibold bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-amber-950"
+          >
+            {saving ? 'Enregistrement…' : `Appliquer (${dirtyFields.length})`}
+          </button>
+        </div>
+      )}
+
       {/* ── Barre bulk action ────────────────────────────────────────────────── */}
-      {selectedIds.size > 0 && (
+      {selectedIds.size > 0 && Object.keys(editRows).length === 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[#0e1a38] text-white rounded-2xl shadow-2xl border border-white/10 px-5 py-3.5 flex items-center gap-4 min-w-[560px] max-w-2xl">
           {/* Compteur */}
           <div className="flex items-center gap-2 shrink-0">
@@ -945,19 +1110,19 @@ export default function Conformity() {
         </div>
       )}
 
-      {/* ── Modales de confirmation ──────────────────────────────────────────── */}
+      {/* ── Modales ──────────────────────────────────────────────────────────── */}
 
-      {confirmEdit && (
-        <ConfirmModal
-          title="Confirmer la modification"
-          message={`Bug #${confirmEdit.bugId}\n${confirmEdit.displayValue}`}
-          confirmLabel="Enregistrer"
-          loading={savingEdit}
-          onConfirm={confirmSave}
-          onCancel={() => setConfirmEdit(null)}
+      {/* Confirmation sauvegarde multi-champs */}
+      {showConfirmSave && (
+        <SaveConfirmModal
+          dirtyFields={dirtyFields}
+          loading={saving}
+          onConfirm={() => { setShowConfirmSave(false); handleSave(); }}
+          onCancel={() => setShowConfirmSave(false)}
         />
       )}
 
+      {/* Confirmation bulk */}
       {confirmBulk && (
         <ConfirmModal
           title={`Modifier ${selectedIds.size} bug${selectedIds.size > 1 ? 's' : ''}`}

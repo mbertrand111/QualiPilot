@@ -106,9 +106,18 @@ export function Layout({ children, title, actions }: LayoutProps) {
         .then((d: { last_sync_at?: string | null }) => setLastSyncAt(d.last_sync_at ?? null))
         .catch(() => {});
     }
+    function onSynced(e: Event) {
+      const lastSyncAt = (e as CustomEvent<{ lastSyncAt?: string }>).detail?.lastSyncAt;
+      if (lastSyncAt) setLastSyncAt(lastSyncAt);
+      else fetchSync();
+    }
     fetchSync();
     const id = setInterval(fetchSync, 30_000);
-    return () => clearInterval(id);
+    window.addEventListener('qualipilot:synced', onSynced);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('qualipilot:synced', onSynced);
+    };
   }, []);
 
   return (
@@ -116,31 +125,30 @@ export function Layout({ children, title, actions }: LayoutProps) {
 
       {/* ── Sidebar ── */}
       <aside className={[
-        'bg-[#0b1e45] sidebar-texture flex flex-col shrink-0 shadow-2xl z-10 transition-all duration-200',
+        'relative bg-[#0b1e45] flex flex-col shrink-0 shadow-2xl z-10 transition-all duration-200',
         collapsed ? 'w-16' : 'w-60',
       ].join(' ')}>
 
-        {/* Logo + toggle */}
+        {/* Logo */}
         <div className={[
           'border-b border-white/[0.07] flex items-center',
-          collapsed ? 'px-3 py-4 justify-center' : 'px-5 py-4 justify-between',
+          collapsed ? 'px-3 py-4 justify-center' : 'px-5 py-4',
         ].join(' ')}>
           {collapsed ? (
-            <span className="text-[#66D2DB] font-black text-lg tracking-tight select-none">Q</span>
+            <img src="/favicon.png" alt="QualiPilot" className="h-8 w-8" />
           ) : (
             <img src="/logo-dark.png" alt="QualiPilot" className="h-10 w-auto" />
           )}
-          <button
-            onClick={() => setCollapsed(c => !c)}
-            title={collapsed ? 'Agrandir la navigation' : 'Réduire la navigation'}
-            className={[
-              'flex items-center justify-center w-6 h-6 rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition-colors shrink-0',
-              collapsed ? 'mt-0' : '',
-            ].join(' ')}
-          >
-            <ChevronLeftIcon className={`w-3.5 h-3.5 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`} />
-          </button>
         </div>
+
+        {/* Toggle — à cheval sur le bord droit */}
+        <button
+          onClick={() => setCollapsed(c => !c)}
+          title={collapsed ? 'Agrandir la navigation' : 'Réduire la navigation'}
+          className="absolute top-[30px] -right-3 z-20 flex items-center justify-center w-6 h-6 rounded-full bg-[#0b1e45]/80 backdrop-blur-sm border border-white/15 text-white/50 hover:text-white hover:border-white/30 transition-colors shadow-md"
+        >
+          <ChevronLeftIcon className={`w-3 h-3 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`} />
+        </button>
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
