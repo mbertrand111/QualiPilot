@@ -344,6 +344,8 @@ export default function ConformityDetail() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [saving, setSaving]           = useState(false);
   const [saveError, setSaveError]     = useState<string | null>(null);
+  const [waivingRule, setWaivingRule] = useState<string | null>(null);
+  const [waiveError, setWaiveError]   = useState<string | null>(null);
 
   // Unsaved changes guard
   const [unsavedModal, setUnsavedModal]   = useState(false);
@@ -463,6 +465,26 @@ export default function ConformityDetail() {
     }
   }
 
+  async function handleWaiveViolation(ruleCode: string) {
+    if (!bug) return;
+    setWaiveError(null);
+    setWaivingRule(ruleCode);
+    try {
+      const res = await fetch('/api/conformity/waivers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bug_id: bug.id, rule_code: ruleCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Erreur ${res.status}`);
+      await reload(true);
+    } catch (e) {
+      setWaiveError(e instanceof Error ? e.message : 'Erreur inconnue');
+    } finally {
+      setWaivingRule(null);
+    }
+  }
+
   function getEditVal(key: EditableKey): string {
     return editValues[key] ?? (bug ? getOriginalValue(bug, key) : '');
   }
@@ -493,6 +515,13 @@ export default function ConformityDetail() {
         <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
           <span>Erreur : {saveError}</span>
           <button onClick={() => setSaveError(null)} className="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
+        </div>
+      )}
+
+      {waiveError && (
+        <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
+          <span>Erreur acceptation anomalie : {waiveError}</span>
+          <button onClick={() => setWaiveError(null)} className="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
         </div>
       )}
 
@@ -686,11 +715,22 @@ export default function ConformityDetail() {
               <div className="space-y-3">
                 {violations.map(v => (
                   <div key={v.id} className="bg-red-50 border border-red-100 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between mb-1.5 gap-2">
                       <span className="text-xs font-mono font-semibold text-red-800">{v.rule_code}</span>
-                      <span className={['text-[11px] font-semibold px-2.5 py-0.5 rounded-full', v.severity === 'error' ? 'bg-red-200 text-red-900' : 'bg-amber-200 text-amber-900'].join(' ')}>
-                        {v.severity === 'error' ? 'Erreur' : 'Alerte'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={['text-[11px] font-semibold px-2.5 py-0.5 rounded-full', v.severity === 'error' ? 'bg-red-200 text-red-900' : 'bg-amber-200 text-amber-900'].join(' ')}>
+                          {v.severity === 'error' ? 'Erreur' : 'Alerte'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleWaiveViolation(v.rule_code)}
+                          disabled={waivingRule === v.rule_code}
+                          className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full border border-red-200 bg-white text-red-700 hover:bg-red-100 disabled:opacity-50 disabled:cursor-wait"
+                          title="Accepter cette anomalie : elle ne remontera plus aux prochaines synchronisations"
+                        >
+                          {waivingRule === v.rule_code ? 'Acceptation…' : 'Accepter'}
+                        </button>
+                      </div>
                     </div>
                     <p className="text-xs text-red-700">{v.rule_description}</p>
                     <p className="text-[11px] text-gray-400 font-mono mt-1.5">{fmtDateShort(v.detected_at)}</p>

@@ -45,6 +45,15 @@ const CORRIGER_PREFIX     = `${ROOT_CORRIGER}\\`;
 const VERSIONS_LIVE       = `${CORRIGER_PREFIX}Versions LIVE`;
 const VERSIONS_HISTORIQUES = `${CORRIGER_PREFIX}Versions historiques`;
 const VERSIONS_HORS       = `${CORRIGER_PREFIX}Hors versions`;
+const TRANSVERSE_AREA_TOKENS = new Set([
+  'ETATS',
+  'GC',
+  'HORSPRODUCTION',
+  'MAINTENANCES',
+  'PERFORMANCE',
+  'SECURITE',
+  'TESTSAUTO',
+]);
 
 // Valid build prefixes for BUILD_CHECK (default list — overridable via rule_config)
 const DEFAULT_VALID_BUILD_PREFIXES = [
@@ -63,6 +72,14 @@ const VERSION_SPECIAL_OK = new Set(['-', 'Non concerné', 'Outil Jbeg', 'Sonarqu
 
 function t(v: string | null | undefined): string {
   return v?.trim() ?? '';
+}
+
+function normalizeToken(v: string): string {
+  return v
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
 }
 
 function isValidFahVersionFormat(v: string): boolean {
@@ -145,6 +162,18 @@ export function evalTriageAreaCheck(bug: BugRow): boolean {
   }
 
   return false;
+}
+
+/** BUGS_TRANSVERSE_AREA — bug non Closed present in transverse areas should be reassigned to a team */
+export function evalNonClosedTransverseArea(bug: BugRow): boolean {
+  if (t(bug.state) === 'Closed') return false;
+
+  const area = t(bug.area_path);
+  if (!area) return false;
+  const areaNoProject = area.startsWith(ADO_PROJECT + '\\') ? area.slice(ADO_PROJECT.length + 1) : area;
+  const segments = areaNoProject.split('\\');
+
+  return segments.some((segment) => TRANSVERSE_AREA_TOKENS.has(normalizeToken(segment)));
 }
 
 /** FAH_VERSION_REQUIRED — bugs LIVE (found_in année ≥ 14) doivent avoir version contenant "FAH_" */
@@ -281,6 +310,8 @@ function evaluateRule(code: string, bug: BugRow, rawConfig: string): boolean {
     case 'PRIORITY_CHECK':               return evalPriorityCheck(bug);
     case 'INTEGRATION_BUILD_NOT_EMPTIED': return evalIntegrationBuildNotEmptied(bug);
     case 'TRIAGE_AREA_CHECK':            return evalTriageAreaCheck(bug);
+    case 'BUGS_TRANSVERSE_AREA':         return evalNonClosedTransverseArea(bug);
+    case 'NON_CLOSED_TRANSVERSE_AREA':   return evalNonClosedTransverseArea(bug); // legacy code support
     case 'FAH_VERSION_REQUIRED':         return evalFahVersionRequired(bug);
     case 'CLOSED_BUG_COHERENCE':         return evalClosedBugCoherence(bug);
     case 'VERSION_CHECK':                return evalVersionCheck(bug);
@@ -311,9 +342,16 @@ export function runConformityCheck(): ConformityCheckResult {
     return { checkedBugs: 0, newViolations: 0, resolvedViolations: 0, runAt };
   }
 
+  const waivedRows = db.prepare(`
+    SELECT bug_id, rule_id FROM conformity_waivers
+  `).all() as { bug_id: number; rule_id: number }[];
+  const waivedKeys = new Set(waivedRows.map((w) => `${w.bug_id}:${w.rule_id}`));
+
   const currentViolations = new Map<string, { bug_id: number; rule_id: number }>();
   for (const bug of bugs) {
     for (const rule of rules) {
+      const key = `${bug.id}:${rule.id}`;
+      if (waivedKeys.has(key)) continue;
       if (evaluateRule(rule.code, bug, rule.rule_config)) {
         currentViolations.set(`${bug.id}:${rule.id}`, { bug_id: bug.id, rule_id: rule.id });
       }

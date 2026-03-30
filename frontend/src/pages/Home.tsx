@@ -10,6 +10,7 @@ interface HomeStats {
     hors_version: number;
     uncategorized: number;
   };
+  resolved_bugs: { total: number };
   anomalies: { total: number };
 }
 
@@ -81,6 +82,7 @@ export function Home() {
   }
 
   const ob = stats?.open_bugs;
+  const rb = stats?.resolved_bugs;
 
   return (
     <Layout title="Tableau de bord" actions={
@@ -114,8 +116,8 @@ export function Home() {
 
       {/* Section — Bugs ouverts par type */}
       <div className="mb-2">
-        <h2 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Bugs New / Active</h2>
-        <div className="grid grid-cols-5 gap-4 mb-7">
+        <h2 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Bugs</h2>
+        <div className="grid grid-cols-6 gap-4 mb-7">
           <StatCard
             label="Total"
             value={ob?.total ?? '…'}
@@ -150,6 +152,13 @@ export function Home() {
             sub="À vérifier"
             color="gray"
             onClick={() => navigate('/triage?bug_type=uncategorized')}
+          />
+          <StatCard
+            label="Resolved"
+            value={rb?.total ?? '…'}
+            sub="Voir les plus récents"
+            color="red"
+            onClick={() => navigate('/triage?state=Resolved&sort=changed_date&dir=desc')}
           />
         </div>
       </div>

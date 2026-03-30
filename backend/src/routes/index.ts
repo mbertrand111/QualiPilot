@@ -5,6 +5,7 @@ import bugsRouter from './bugs';
 import conformityRouter from './conformity';
 import writeRouter from './write';
 import statsRouter from './stats';
+import kpisRouter from './kpis';
 
 const router = Router();
 
@@ -14,5 +15,6 @@ router.use('/', bugsRouter);
 router.use('/', conformityRouter);
 router.use('/', writeRouter);
 router.use('/', statsRouter);
+router.use('/', kpisRouter);
 
 export default router;

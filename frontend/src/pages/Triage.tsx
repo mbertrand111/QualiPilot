@@ -203,8 +203,11 @@ export default function Triage() {
   const [filterBuild,    setFilterBuild]    = useState('');
 
   // Tri
-  const [sort, setSort] = useState('changed_date');
-  const [dir,  setDir]  = useState<SortDir>('desc');
+  const [sort, setSort] = useState(() => {
+    const s = searchParams.get('sort');
+    return s && s.trim() ? s : 'changed_date';
+  });
+  const [dir,  setDir]  = useState<SortDir>(() => searchParams.get('dir') === 'asc' ? 'asc' : 'desc');
 
   // Sync
   const [syncing,    setSyncing]    = useState(false);

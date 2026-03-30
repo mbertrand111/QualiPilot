@@ -17,12 +17,14 @@ const OBSOLETE_RULE_CODES = [
   'NON_CONCERNE_COHERENCE',
   'CLOSED_BUG_IN_TRIAGE_AREA',
   'AREA_PATH_PRODUCT_COHERENCE',
+  'NON_CLOSED_TRANSVERSE_AREA',
 ];
 
 const CURRENT_RULES: { code: string; description: string; severity: string }[] = [
   { code: 'PRIORITY_CHECK',               description: 'Priority doit être 2',                                                     severity: 'error' },
   { code: 'INTEGRATION_BUILD_NOT_EMPTIED', description: 'Bugs New/Active doivent avoir Integration Build vide',                     severity: 'error' },
   { code: 'TRIAGE_AREA_CHECK',            description: 'Cohérence zone triage : bugs fermés, sous-classement et produit correct',  severity: 'error' },
+  { code: 'BUGS_TRANSVERSE_AREA',         description: 'Bug non Closed dans zone transverse (Etats/GC/Hors-production/Maintenances/Performance/Securite/Tests auto)', severity: 'error' },
   { code: 'FAH_VERSION_REQUIRED',         description: 'Bugs LIVE (found_in ≥ 14.xx) doivent avoir version souhaitée avec FAH_',  severity: 'error' },
   { code: 'CLOSED_BUG_COHERENCE',         description: 'Bug non-corrigé (Closed) → version & build doivent être "-"',             severity: 'error' },
   { code: 'VERSION_CHECK',               description: 'Format version souhaitée valide selon le type de bug (FAH_ / 12. / 13.8)', severity: 'error' },
@@ -65,17 +67,21 @@ function migrateSprintValues(db: Database.Database): void {
 // Normalise les noms d'équipes dans bugs_cache (GO_FAHST → GO FAHST, etc.)
 // Idempotent : n'affecte que les lignes avec les anciennes valeurs.
 function migrateNormalizeTeamNames(db: Database.Database): void {
-  const renames: [string, string][] = [
-    ['GO_FAHST',      'GO FAHST'],
-    ['MELI_MELO',     'MELI MELO'],
-    ['MAGIC_SYSTEM',  'MAGIC SYSTEM'],
-    ['JURASSIC_BACK', 'JURASSIC BACK'],
-    ['NULL_REF',      'NULL.REF'],
-    ['NULL REF',      'NULL.REF'],
+  const renames: [canonical: string, normalizedToken: string][] = [
+    ['GO FAHST',      'GOFAHST'],
+    ['MELI MELO',     'MELIMELO'],
+    ['MAGIC SYSTEM',  'MAGICSYSTEM'],
+    ['JURASSIC BACK', 'JURASSICBACK'],
+    ['NULL.REF',      'NULLREF'],
   ];
-  const update = db.prepare(`UPDATE bugs_cache SET team = ? WHERE team = ?`);
+  const update = db.prepare(`
+    UPDATE bugs_cache
+    SET team = ?
+    WHERE team IS NOT NULL
+      AND REPLACE(REPLACE(REPLACE(UPPER(TRIM(team)), '.', ''), '_', ''), ' ', '') = ?
+  `);
   db.transaction(() => {
-    for (const [old, canonical] of renames) update.run(canonical, old);
+    for (const [canonical, token] of renames) update.run(canonical, token);
   })();
 }
 

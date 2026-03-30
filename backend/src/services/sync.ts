@@ -33,11 +33,15 @@ const TEAM_NAME_NORMALIZE: Record<string, string> = {
   'MAGIC_SYSTEM':  'MAGIC SYSTEM',
   'JURASSIC_BACK': 'JURASSIC BACK',
   'NULL_REF':      'NULL.REF',
-  'NULL REF':      'NULL.REF',
+  'NULLREF':       'NULL.REF',
 };
 
 function normalizeTeamName(raw: string): string {
-  return TEAM_NAME_NORMALIZE[raw] ?? raw;
+  const trimmed = raw.trim();
+  const normalizedKey = trimmed
+    .toUpperCase()
+    .replace(/[.\s_]+/g, '_');
+  return TEAM_NAME_NORMALIZE[normalizedKey] ?? trimmed;
 }
 
 // Extrait le nom d'équipe depuis l'area path

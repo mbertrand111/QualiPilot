@@ -61,19 +61,31 @@ const REAL_TEAMS = ['COCO', 'GO FAHST', 'JURASSIC BACK', 'MAGIC SYSTEM', 'MELI M
 // Anciennes équipes à masquer (bugs en cache potentiellement encore présents)
 const OBSOLETE_TEAMS = new Set(['PIRATS', 'CORTEX']);
 
-const ZONE_TEAM_OPTIONS = [
+const ZONE_OPTIONS = [
   'Bugs à prioriser',
   'Bugs à corriger LIVE',
   'Bugs à corriger OnPremise',
   'Bugs à corriger Hors versions',
   'Bugs à corriger',
+  'Etats',
+  'GC',
+  'Hors-production',
+  'Maintenances',
+  'Performance',
+  'Sécurité',
 ];
-const ZONE_TEAM_LABELS: Record<string, string> = {
+const ZONE_LABELS: Record<string, string> = {
   'Bugs à prioriser':              'Bugs à prioriser',
-  'Bugs à corriger LIVE':          'À corriger — Live',
-  'Bugs à corriger OnPremise':     'À corriger — OnPremise',
-  'Bugs à corriger Hors versions': 'À corriger — Hors version',
+  'Bugs à corriger LIVE':          'À corriger - Live',
+  'Bugs à corriger OnPremise':     'À corriger - OnPremise',
+  'Bugs à corriger Hors versions': 'À corriger - Hors version',
   'Bugs à corriger':               'À corriger (sans zone)',
+  Etats:                           'Etats',
+  GC:                              'GC',
+  'Hors-production':               'Hors-production',
+  Maintenances:                    'Maintenances',
+  Performance:                     'Performance',
+  Sécurité:                        'Sécurité',
 };
 
 const BUG_TYPE_LABELS: Record<string, string> = {
@@ -87,6 +99,7 @@ const ALL_RULES = [
   'PRIORITY_CHECK',
   'INTEGRATION_BUILD_NOT_EMPTIED',
   'TRIAGE_AREA_CHECK',
+  'BUGS_TRANSVERSE_AREA',
   'FAH_VERSION_REQUIRED',
   'CLOSED_BUG_COHERENCE',
   'VERSION_CHECK',
@@ -448,8 +461,8 @@ export default function Conformity() {
     setError(null);
     try {
       const params = new URLSearchParams({ page: String(p), limit: String(LIMIT), sort, dir });
-      const teamValues = [...filterTeams, ...filterZones];
-      if (teamValues.length)      params.set('team',      teamValues.join(','));
+      if (filterTeams.length)     params.set('team',      filterTeams.join(','));
+      if (filterZones.length)     params.set('zone',      filterZones.join(','));
       if (filterSprints.length)   params.set('sprint',    filterSprints.join(','));
       if (filterBugTypes.length)  params.set('bug_type',  filterBugTypes.join(','));
       if (filterRules.length)     params.set('rule_code', filterRules.join(','));
@@ -739,10 +752,10 @@ export default function Conformity() {
           <MultiSelect label="Équipes" options={REAL_TEAMS} selected={filterTeams} onChange={setFilterTeams} />
           <MultiSelect
             label="Zone"
-            options={ZONE_TEAM_OPTIONS}
+            options={ZONE_OPTIONS}
             selected={filterZones}
             onChange={setFilterZones}
-            renderOption={opt => <span>{ZONE_TEAM_LABELS[opt] ?? opt}</span>}
+            renderOption={opt => <span>{ZONE_LABELS[opt] ?? opt}</span>}
           />
           <MultiSelect label="États" options={['New', 'Active', 'Resolved', 'Closed']} selected={filterStates} onChange={setFilterStates}
             renderOption={(opt: string) => (

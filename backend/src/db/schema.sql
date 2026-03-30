@@ -61,6 +61,16 @@ CREATE TABLE IF NOT EXISTS conformity_violations (
   UNIQUE(bug_id, rule_id)
 );
 
+-- Exceptions de conformite acceptees manuellement (waivers)
+CREATE TABLE IF NOT EXISTS conformity_waivers (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  bug_id      INTEGER NOT NULL REFERENCES bugs_cache(id) ON DELETE CASCADE,
+  rule_id     INTEGER NOT NULL REFERENCES conformity_rules(id) ON DELETE CASCADE,
+  reason      TEXT,
+  created_at  TEXT DEFAULT (datetime('now')),
+  UNIQUE(bug_id, rule_id)
+);
+
 -- Snapshots KPI (historisation automatique hebdomadaire)
 CREATE TABLE IF NOT EXISTS kpi_snapshots (
   id                    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,16 +95,29 @@ CREATE TABLE IF NOT EXISTS ado_write_audit (
   performed_at  TEXT DEFAULT (datetime('now'))
 );
 
+-- Audit des corrections automatiques
+CREATE TABLE IF NOT EXISTS auto_fix_audit (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_item_id    INTEGER NOT NULL,
+  field           TEXT NOT NULL,
+  old_value       TEXT,
+  new_value       TEXT,
+  trigger_source  TEXT NOT NULL,
+  performed_at    TEXT DEFAULT (datetime('now')),
+  acknowledged_at TEXT
+);
+
 -- Données initiales : 8 équipes
 INSERT OR IGNORE INTO teams (name) VALUES
   ('COCO'), ('GO FAHST'), ('JURASSIC BACK'), ('MAGIC SYSTEM'),
   ('MELI MELO'), ('NULL.REF'), ('PIXELS'), ('LACE');
 
--- Données initiales : 8 règles de conformité (ordre d'affichage dans les paramètres)
+-- Données initiales : 9 règles de conformité (ordre d'affichage dans les paramètres)
 INSERT OR IGNORE INTO conformity_rules (code, description, severity, active, rule_config) VALUES
   ('PRIORITY_CHECK',               'Priority doit être 2',                                                     'error',   1, '{}'),
   ('INTEGRATION_BUILD_NOT_EMPTIED','Bugs New/Active doivent avoir Integration Build vide',                     'error',   1, '{}'),
   ('TRIAGE_AREA_CHECK',            'Cohérence zone triage : bugs fermés, sous-classement et produit correct',  'error',   1, '{}'),
+  ('BUGS_TRANSVERSE_AREA',         'Bug non Closed dans zone transverse (Etats/GC/Hors-production/Maintenances/Performance/Securite/Tests auto)', 'error', 1, '{}'),
   ('FAH_VERSION_REQUIRED',         'Bugs LIVE (found_in ≥ 14.xx) doivent avoir version souhaitée avec FAH_',  'error',   1, '{}'),
   ('CLOSED_BUG_COHERENCE',         'Bug non-corrigé (Closed) → version & build doivent être "-"',             'error',   1, '{}'),
   ('VERSION_CHECK',                'Format version souhaitée valide selon le type de bug (FAH_ / 12. / 13.8)','error',   1, '{}'),

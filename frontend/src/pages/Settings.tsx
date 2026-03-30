@@ -4,10 +4,11 @@ const RULES = [
   { code: 'PRIORITY_CHECK',                desc: 'Priority doit être 2',                                                      severity: 'error' as const, active: true },
   { code: 'INTEGRATION_BUILD_NOT_EMPTIED', desc: 'Bugs New/Active doivent avoir Integration Build vide',                      severity: 'error' as const, active: true },
   { code: 'TRIAGE_AREA_CHECK',             desc: 'Cohérence zone triage : bugs fermés, sous-classement et produit correct',   severity: 'error' as const, active: true },
+  { code: 'BUGS_TRANSVERSE_AREA',          desc: 'Bug non Closed dans zone transverse (Etats/GC/Hors-production/Maintenances/Performance/Securite/Tests auto)', severity: 'error' as const, active: true },
   { code: 'FAH_VERSION_REQUIRED',          desc: 'Bugs LIVE (found_in ≥ 14.xx) doivent avoir version souhaitée avec FAH_',   severity: 'error' as const, active: true },
   { code: 'CLOSED_BUG_COHERENCE',          desc: 'Bug non-corrigé (Closed) → version & build doivent être "-"',              severity: 'error' as const, active: true },
   { code: 'VERSION_CHECK',                 desc: 'Format version souhaitée valide selon le type de bug (FAH_ / 12. / 13.8)', severity: 'error' as const, active: true },
-  { code: 'BUILD_CHECK',                   desc: 'Bugs Closed/Resolved doivent avoir un build valide dans la liste connue',  severity: 'error' as const, active: true },
+  { code: 'BUILD_CHECK',                   desc: 'Bugs Closed/Resolved doivent avoir un build valide dans la liste connue',   severity: 'error' as const, active: true },
   { code: 'VERSION_BUILD_COHERENCE',       desc: 'Cohérence version souhaitée / build (Non concerné, format Patch)',         severity: 'error' as const, active: true },
 ];
 

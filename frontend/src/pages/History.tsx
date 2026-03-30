@@ -1,23 +1,47 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Layout } from '../components/Layout';
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
+const ADO_BASE = 'https://dev.azure.com/Isagri-Prod-Progiciels/Isagri_Dev_GC_GestionCommerciale/_workitems/edit/';
 
+// Donnees snapshots (mock historique existant)
 const SNAPSHOTS = [
   { date: '23/03/2026', sprint: 'PI5-SP3', totalBugs: 247, created: 33, closed: 28, violations: 52, conformity: 78 },
   { date: '16/03/2026', sprint: 'PI5-SP2', totalBugs: 242, created: 47, closed: 43, violations: 61, conformity: 75 },
   { date: '09/03/2026', sprint: 'PI5-SP1', totalBugs: 238, created: 41, closed: 38, violations: 68, conformity: 71 },
-  { date: '02/03/2026', sprint: 'PI5-IP',  totalBugs: 235, created: 12, closed: 18, violations: 55, conformity: 77 },
+  { date: '02/03/2026', sprint: 'PI5-IP', totalBugs: 235, created: 12, closed: 18, violations: 55, conformity: 77 },
   { date: '23/02/2026', sprint: 'PI4-SP4', totalBugs: 241, created: 36, closed: 42, violations: 49, conformity: 80 },
   { date: '16/02/2026', sprint: 'PI4-SP3', totalBugs: 247, created: 44, closed: 39, violations: 63, conformity: 74 },
   { date: '09/02/2026', sprint: 'PI4-SP2', totalBugs: 242, created: 52, closed: 47, violations: 71, conformity: 71 },
   { date: '02/02/2026', sprint: 'PI4-SP1', totalBugs: 237, created: 38, closed: 41, violations: 58, conformity: 76 },
 ];
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+interface AutoFixRow {
+  id: number;
+  work_item_id: number;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  trigger_source: string;
+  performed_at: string;
+}
+
+function fmtDateTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+}
 
 function ConformityBar({ value }: { value: number }) {
   const color = value >= 80 ? 'bg-green-500' : value >= 70 ? 'bg-amber-400' : 'bg-red-500';
-  const text  = value >= 80 ? 'text-green-600' : value >= 70 ? 'text-amber-600' : 'text-red-600';
+  const text = value >= 80 ? 'text-green-600' : value >= 70 ? 'text-amber-600' : 'text-red-600';
   return (
     <div className="flex items-center justify-end gap-2">
       <div className="w-14 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -31,10 +55,58 @@ function ConformityBar({ value }: { value: number }) {
 export default function History() {
   const trend = SNAPSHOTS[0].totalBugs - SNAPSHOTS[SNAPSHOTS.length - 1].totalBugs;
 
+  const [autoRows, setAutoRows] = useState<AutoFixRow[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [loadingAuto, setLoadingAuto] = useState(false);
+  const [autoError, setAutoError] = useState<string | null>(null);
+  const [acking, setAcking] = useState(false);
+
+  const hasAutoRows = autoRows.length > 0;
+
+  const loadAutoFixes = useCallback(async () => {
+    setLoadingAuto(true);
+    setAutoError(null);
+    try {
+      const res = await fetch('/api/stats/auto-fixes');
+      if (!res.ok) throw new Error(`Erreur ${res.status}`);
+      const data = await res.json();
+      setAutoRows(Array.isArray(data.rows) ? data.rows : []);
+      setPendingCount(typeof data.pending === 'number' ? data.pending : 0);
+    } catch (e) {
+      setAutoError(e instanceof Error ? e.message : 'Erreur inconnue');
+    } finally {
+      setLoadingAuto(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAutoFixes();
+  }, [loadAutoFixes]);
+
+  async function acknowledgeAll() {
+    setAcking(true);
+    setAutoError(null);
+    try {
+      const res = await fetch('/api/stats/auto-fixes/ack', { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? `Erreur ${res.status}`);
+      }
+      await loadAutoFixes();
+    } catch (e) {
+      setAutoError(e instanceof Error ? e.message : 'Erreur inconnue');
+    } finally {
+      setAcking(false);
+    }
+  }
+
+  const autoSectionTitle = useMemo(() => {
+    if (pendingCount <= 0) return 'Corrections auto en attente';
+    return `Corrections auto en attente (${pendingCount})`;
+  }, [pendingCount]);
+
   return (
     <Layout title="Historique des snapshots">
-
-      {/* Info banner */}
       <div className="fade-up flex items-start gap-4 mb-6">
         <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
@@ -44,10 +116,10 @@ export default function History() {
           </div>
           <div>
             <div className="text-sm font-semibold text-[#0e1a38]">
-              {SNAPSHOTS.length} snapshots — automatiques chaque semaine
+              {SNAPSHOTS.length} snapshots - automatiques chaque semaine
             </div>
             <div className="text-xs text-gray-400 mt-0.5">
-              Évolution sur 8 semaines · Backlog {trend > 0 ? `+${trend}` : trend} bugs vs il y a 8 semaines
+              Evolution sur 8 semaines - Backlog {trend > 0 ? `+${trend}` : trend} bugs vs il y a 8 semaines
             </div>
           </div>
         </div>
@@ -61,12 +133,11 @@ export default function History() {
         </div>
       </div>
 
-      {/* Table */}
       <div className="fade-up fade-up-1 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50/60 border-b border-gray-100">
-              {['Date', 'Sprint', 'Bugs ouverts', 'Créés', 'Fermés', 'Anomalies', 'Conformité'].map((h, i) => (
+              {['Date', 'Sprint', 'Bugs ouverts', 'Crees', 'Fermes', 'Anomalies', 'Conformite'].map((h, i) => (
                 <th
                   key={h}
                   className={`px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 ${
@@ -117,9 +188,94 @@ export default function History() {
         </table>
       </div>
 
+      <div className="fade-up fade-up-2 mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-[#0e1a38]">{autoSectionTitle}</div>
+            <div className="text-xs text-gray-400 mt-0.5">
+              Trace des modifications appliquees automatiquement (sync + scheduler 15 min)
+            </div>
+          </div>
+          <button
+            onClick={acknowledgeAll}
+            disabled={acking || !hasAutoRows}
+            className={[
+              'inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold border transition-colors',
+              acking || !hasAutoRows
+                ? 'bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed'
+                : 'bg-white text-[#1E63B6] border-[#1E63B6]/30 hover:bg-blue-50 hover:border-[#1E63B6]',
+            ].join(' ')}
+            title="Valider/vider le tableau des corrections automatiques"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+            {acking ? 'Validation...' : 'Valider / vider'}
+          </button>
+        </div>
+
+        {autoError && (
+          <div className="px-5 py-3 text-sm text-red-600 bg-red-50 border-b border-red-100">
+            Erreur: {autoError}
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[920px]">
+            <thead>
+              <tr className="bg-gray-50/60 border-b border-gray-100">
+                {['Date', 'Bug', 'Champ', 'Ancienne valeur', 'Nouvelle valeur', 'Source'].map((h) => (
+                  <th key={h} className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 text-left">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {loadingAuto && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">Chargement...</td>
+                </tr>
+              )}
+              {!loadingAuto && autoRows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
+                    Aucune correction auto en attente.
+                  </td>
+                </tr>
+              )}
+              {!loadingAuto && autoRows.map((row) => (
+                <tr key={row.id} className="hover:bg-gray-50/50">
+                  <td className="px-4 py-3 text-xs text-gray-600 font-mono">{fmtDateTime(row.performed_at)}</td>
+                  <td className="px-4 py-3 text-xs font-mono">
+                    <a
+                      href={`${ADO_BASE}${row.work_item_id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#1E63B6] hover:underline"
+                    >
+                      #{row.work_item_id}
+                    </a>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-700 font-mono">{row.field}</td>
+                  <td className="px-4 py-3 text-xs text-red-500 font-mono">{row.old_value ?? '(vide)'}</td>
+                  <td className="px-4 py-3 text-xs text-green-600 font-mono">{row.new_value ?? '(vide)'}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">
+                    <span className="inline-flex px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
+                      {row.trigger_source}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <p className="fade-up mt-4 text-[11px] text-gray-400 text-center">
-        Snapshots générés automatiquement chaque semaine par le scheduler — aucune action manuelle requise.
+        Snapshots generes automatiquement chaque semaine par le scheduler - aucune action manuelle requise.
       </p>
     </Layout>
   );
 }
+

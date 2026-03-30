@@ -14,6 +14,49 @@ router.post('/conformity/run', (_req, res) => {
   }
 });
 
+// POST /api/conformity/waivers
+// Accepte manuellement une anomalie (bug + règle) pour qu'elle ne remonte plus.
+router.post('/conformity/waivers', (req, res) => {
+  const db = getDb();
+  const bugIdRaw = req.body?.bug_id;
+  const ruleCode = typeof req.body?.rule_code === 'string' ? req.body.rule_code.trim() : '';
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : null;
+
+  const bugId = typeof bugIdRaw === 'number' ? bugIdRaw : parseInt(String(bugIdRaw ?? ''), 10);
+  if (!Number.isFinite(bugId) || bugId <= 0) {
+    return res.status(400).json({ error: 'bug_id invalide' });
+  }
+  if (!ruleCode) {
+    return res.status(400).json({ error: 'rule_code obligatoire' });
+  }
+
+  const bug = db.prepare(`SELECT id FROM bugs_cache WHERE id = ?`).get(bugId) as { id: number } | undefined;
+  if (!bug) {
+    return res.status(404).json({ error: 'Bug non trouve' });
+  }
+
+  const rule = db.prepare(`SELECT id, code FROM conformity_rules WHERE code = ?`).get(ruleCode) as { id: number; code: string } | undefined;
+  if (!rule) {
+    return res.status(404).json({ error: 'Regle inconnue' });
+  }
+
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO conformity_waivers (bug_id, rule_id, reason, created_at)
+      VALUES (?, ?, ?, datetime('now'))
+      ON CONFLICT(bug_id, rule_id) DO UPDATE SET reason = excluded.reason
+    `).run(bugId, rule.id, reason);
+
+    db.prepare(`
+      UPDATE conformity_violations
+      SET resolved_at = datetime('now')
+      WHERE bug_id = ? AND rule_id = ? AND resolved_at IS NULL
+    `).run(bugId, rule.id);
+  })();
+
+  res.json({ ok: true, bug_id: bugId, rule_code: rule.code });
+});
+
 const VIOLATION_SORTABLE: Record<string, string> = {
   bug_id:          'b.id',
   team:            'b.team',
@@ -25,12 +68,29 @@ const VIOLATION_SORTABLE: Record<string, string> = {
   changed_date:    'b.changed_date',
 };
 
+const ZONE_ALIASES: Record<string, string[]> = {
+  'Bugs à corriger LIVE': ['Bugs à corriger LIVE', 'Bugs à corriger\\Versions LIVE'],
+  'Bugs à corriger OnPremise': ['Bugs à corriger OnPremise', 'Bugs à corriger\\Versions historiques'],
+  'Bugs à corriger Hors versions': ['Bugs à corriger Hors versions', 'Bugs à corriger\\Hors versions'],
+  Etats: ['Etats', 'États'],
+  'Sécurité': ['Sécurité', 'Securite'],
+  'Hors-production': ['Hors-production', 'Hors production'],
+};
+
+function zoneCandidates(zone: string): string[] {
+  const trimmed = zone.trim();
+  if (!trimmed) return [];
+  const aliases = ZONE_ALIASES[trimmed] ?? [trimmed];
+  return [...new Set(aliases)];
+}
+
 // GET /api/conformity/violations
 // Retourne un bug par ligne (dédupliqué) + rule_counts pour les chips de filtre.
 router.get('/conformity/violations', (req, res) => {
   const db = getDb();
 
   const teams     = typeof req.query.team      === 'string' && req.query.team      ? req.query.team.split(',').filter(Boolean)      : [];
+  const zones     = typeof req.query.zone      === 'string' && req.query.zone      ? req.query.zone.split(',').filter(Boolean)      : [];
   const codes     = typeof req.query.rule_code === 'string' && req.query.rule_code ? req.query.rule_code.split(',').filter(Boolean) : [];
   const states    = typeof req.query.state     === 'string' && req.query.state     ? req.query.state.split(',').filter(Boolean)     : [];
   const sprints   = typeof req.query.sprint    === 'string' && req.query.sprint    ? req.query.sprint.split(',').filter(Boolean)    : [];
@@ -56,13 +116,28 @@ router.get('/conformity/violations', (req, res) => {
   const offset = (page - 1) * limit;
 
   // Conditions de base (sans filtre règle) — utilisées pour rule_counts
-  const baseConditions: string[] = ['v.resolved_at IS NULL'];
+  const baseConditions: string[] = [
+    'v.resolved_at IS NULL',
+    'NOT EXISTS (SELECT 1 FROM conformity_waivers w WHERE w.bug_id = v.bug_id AND w.rule_id = v.rule_id)',
+  ];
   const baseParams: unknown[]    = [];
 
   if (bugId !== null) { baseConditions.push('v.bug_id = ?'); baseParams.push(bugId); }
 
   if (teams.length === 1)    { baseConditions.push('b.team = ?');                                      baseParams.push(teams[0]); }
   else if (teams.length > 1) { baseConditions.push(`b.team IN (${teams.map(() => '?').join(',')})`);   baseParams.push(...teams); }
+  if (zones.length > 0) {
+    const zoneParts: string[] = [];
+    for (const zone of zones) {
+      for (const candidate of zoneCandidates(zone)) {
+        zoneParts.push('(b.area_path = ? OR b.area_path LIKE ? OR b.area_path LIKE ?)');
+        baseParams.push(candidate, `%\\${candidate}`, `%\\${candidate}\\%`);
+      }
+    }
+    if (zoneParts.length > 0) {
+      baseConditions.push(`(${zoneParts.join(' OR ')})`);
+    }
+  }
   if (states.length === 1)   { baseConditions.push('b.state = ?');                                     baseParams.push(states[0]); }
   else if (states.length > 1){ baseConditions.push(`b.state IN (${states.map(() => '?').join(',')})`); baseParams.push(...states); }
   if (sprints.length === 1)   { baseConditions.push('b.sprint = ?');                                    baseParams.push(sprints[0]); }

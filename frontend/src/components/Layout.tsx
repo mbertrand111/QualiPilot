@@ -1,8 +1,8 @@
-import { useLocation, Link } from 'react-router-dom';
+﻿import { useLocation, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
-// â”€â”€â”€ Icons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Icons Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function HomeIcon({ className }: { className?: string }) {
   return (
@@ -61,7 +61,7 @@ function ChevronLeftIcon({ className }: { className?: string }) {
   );
 }
 
-// â”€â”€â”€ Nav config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Nav config Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 const NAV_ITEMS = [
   { path: '/',           icon: HomeIcon,    label: 'Tableau de bord', exact: true },
@@ -69,26 +69,27 @@ const NAV_ITEMS = [
   { path: '/conformity', icon: AlertIcon,   label: 'Anomalies',        exact: false },
   { path: '/kpis',       icon: ChartIcon,   label: 'KPIs',             exact: false },
   { path: '/history',    icon: ClockIcon,   label: 'Historique',       exact: false },
-  { path: '/settings',   icon: CogIcon,     label: 'ParamÃ¨tres',       exact: false },
+  { path: '/settings',   icon: CogIcon,     label: 'Parametres',       exact: false },
 ];
 
-// â”€â”€â”€ Layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Layout Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 interface LayoutProps {
   children: ReactNode;
   title?: string;
   actions?: ReactNode;
+  contentClassName?: string;
 }
 
 function formatSyncDate(iso: string | null): string {
-  if (!iso) return 'â€”';
+  if (!iso) return '-';
   const d = new Date(iso);
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })
-    + ' â€” '
+    + ' - '
     + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
 
-export function Layout({ children, title, actions }: LayoutProps) {
+export function Layout({ children, title, actions, contentClassName }: LayoutProps) {
   const location = useLocation();
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(() => {
@@ -123,7 +124,7 @@ export function Layout({ children, title, actions }: LayoutProps) {
   return (
     <div className="flex h-screen bg-[#f7f8fc] overflow-hidden font-sans">
 
-      {/* â”€â”€ Sidebar â”€â”€ */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Sidebar Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <aside className={[
         'relative bg-[#0b1e45] flex flex-col shrink-0 shadow-2xl z-10 transition-all duration-200',
         collapsed ? 'w-16' : 'w-60',
@@ -141,10 +142,10 @@ export function Layout({ children, title, actions }: LayoutProps) {
           )}
         </div>
 
-        {/* Toggle â€” Ã  cheval sur le bord droit */}
+        {/* Toggle Ã¢â‚¬â€ ÃƒÂ  cheval sur le bord droit */}
         <button
           onClick={() => setCollapsed(c => !c)}
-          title={collapsed ? 'Agrandir la navigation' : 'RÃ©duire la navigation'}
+          title={collapsed ? 'Agrandir la navigation' : 'Reduire la navigation'}
           className="absolute top-[30px] -right-3 z-20 flex items-center justify-center w-6 h-6 rounded-full bg-[#0b1e45]/80 backdrop-blur-sm border border-white/15 text-white/50 hover:text-white hover:border-white/30 transition-colors shadow-md"
         >
           <ChevronLeftIcon className={`w-3 h-3 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`} />
@@ -189,7 +190,7 @@ export function Layout({ children, title, actions }: LayoutProps) {
         {/* Sync status footer */}
         <div className={['border-t border-white/[0.07]', collapsed ? 'px-0 py-4 flex justify-center' : 'px-5 py-4'].join(' ')}>
           {collapsed ? (
-            <span className="relative flex h-2 w-2 shrink-0" title={`DerniÃ¨re sync : ${formatSyncDate(lastSyncAt)}`}>
+            <span className="relative flex h-2 w-2 shrink-0" title={`Derniere sync : ${formatSyncDate(lastSyncAt)}`}>
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#66D2DB] opacity-60"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-[#66D2DB]"></span>
             </span>
@@ -200,7 +201,7 @@ export function Layout({ children, title, actions }: LayoutProps) {
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-[#66D2DB]"></span>
               </span>
               <div className="min-w-0">
-                <div className="text-[11px] text-white/40 font-medium">DerniÃ¨re sync</div>
+                <div className="text-[11px] text-white/40 font-medium">Derniere sync</div>
                 <div className="text-[11px] text-white/50 font-mono truncate">{formatSyncDate(lastSyncAt)}</div>
               </div>
             </div>
@@ -208,7 +209,7 @@ export function Layout({ children, title, actions }: LayoutProps) {
         </div>
       </aside>
 
-      {/* â”€â”€ Main area â”€â”€ */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Main area Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Page header */}
@@ -222,10 +223,11 @@ export function Layout({ children, title, actions }: LayoutProps) {
         )}
 
         {/* Content */}
-        <main className="flex-1 overflow-auto bg-[#f7f8fc] p-7">
+        <main className={['flex-1 overflow-auto bg-[#f7f8fc]', contentClassName ?? 'p-7'].join(' ')}>
           {children}
         </main>
       </div>
     </div>
   );
 }
+

@@ -3,8 +3,69 @@ import { getDb } from '../db';
 
 const router = Router();
 
+// GET /api/stats/auto-fixes
+// Retourne les dernières corrections automatiques (par défaut: non validées).
+router.get('/stats/auto-fixes', (req, res) => {
+  const db = getDb();
+  const onlyPending = req.query.only_pending !== '0';
+
+  const rows = db.prepare(`
+    SELECT id, work_item_id, field, old_value, new_value, trigger_source, performed_at, acknowledged_at
+    FROM auto_fix_audit
+    ${onlyPending ? 'WHERE acknowledged_at IS NULL' : ''}
+    ORDER BY performed_at DESC
+    LIMIT 300
+  `).all() as {
+    id: number;
+    work_item_id: number;
+    field: string;
+    old_value: string | null;
+    new_value: string | null;
+    trigger_source: string;
+    performed_at: string;
+    acknowledged_at: string | null;
+  }[];
+
+  const pending = (db.prepare(`
+    SELECT COUNT(*) AS n FROM auto_fix_audit WHERE acknowledged_at IS NULL
+  `).get() as { n: number }).n;
+
+  res.json({ pending, rows });
+});
+
+// POST /api/stats/auto-fixes/ack
+// Valide (et retire du tableau) les corrections auto, toutes ou un sous-ensemble d'IDs.
+router.post('/stats/auto-fixes/ack', (req, res) => {
+  const db = getDb();
+  const ids = Array.isArray(req.body?.ids)
+    ? req.body.ids.map((v: unknown) => parseInt(String(v), 10)).filter((n: number) => Number.isFinite(n) && n > 0)
+    : [];
+
+  let acknowledged = 0;
+  if (ids.length > 0) {
+    const placeholders = ids.map(() => '?').join(',');
+    const stmt = db.prepare(`
+      UPDATE auto_fix_audit
+      SET acknowledged_at = datetime('now')
+      WHERE acknowledged_at IS NULL
+        AND id IN (${placeholders})
+    `);
+    const result = stmt.run(...ids);
+    acknowledged = result.changes;
+  } else {
+    const result = db.prepare(`
+      UPDATE auto_fix_audit
+      SET acknowledged_at = datetime('now')
+      WHERE acknowledged_at IS NULL
+    `).run();
+    acknowledged = result.changes;
+  }
+
+  res.json({ acknowledged });
+});
+
 // GET /api/stats/home
-// Returns open bug counts by type + total active violations
+// Returns open bug counts by type + resolved bugs + total active violations
 router.get('/stats/home', (_req, res) => {
   const db = getDb();
 
@@ -26,6 +87,10 @@ router.get('/stats/home', (_req, res) => {
     SELECT COUNT(*) AS n FROM conformity_violations WHERE resolved_at IS NULL
   `).get() as { n: number }).n;
 
+  const resolved = (db.prepare(`
+    SELECT COUNT(*) AS n FROM bugs_cache WHERE state = 'Resolved'
+  `).get() as { n: number }).n;
+
   res.json({
     open_bugs: {
       total,
@@ -34,6 +99,7 @@ router.get('/stats/home', (_req, res) => {
       hors_version:  counts['hors_version']   ?? 0,
       uncategorized: counts['uncategorized']  ?? 0,
     },
+    resolved_bugs: { total: resolved },
     anomalies: { total: anomalies },
   });
 });

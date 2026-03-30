@@ -21,11 +21,15 @@ const TEAM_NAME_NORMALIZE: Record<string, string> = {
   'MAGIC_SYSTEM':  'MAGIC SYSTEM',
   'JURASSIC_BACK': 'JURASSIC BACK',
   'NULL_REF':      'NULL.REF',
-  'NULL REF':      'NULL.REF',
+  'NULLREF':       'NULL.REF',
 };
 
 function normalizeTeamName(raw: string): string {
-  return TEAM_NAME_NORMALIZE[raw] ?? raw;
+  const trimmed = raw.trim();
+  const normalizedKey = trimmed
+    .toUpperCase()
+    .replace(/[.\s_]+/g, '_');
+  return TEAM_NAME_NORMALIZE[normalizedKey] ?? trimmed;
 }
 
 // Zones ADO autorisées pour le déplacement de bugs
@@ -130,6 +134,10 @@ export interface BulkWriteResult {
   failed: { bug_id: number; error: string }[];
 }
 
+export interface WriteOptions {
+  runConformity?: boolean;
+}
+
 // ─── HTTP helper (write) ──────────────────────────────────────────────────────
 
 function getAuthHeader(): string {
@@ -194,6 +202,7 @@ export async function writeField(
   bugId: number,
   field: string,
   value: unknown,
+  options: WriteOptions = {},
 ): Promise<WriteResult> {
   const db = getDb();
   const fieldDef = WRITABLE_FIELDS[field];
@@ -244,7 +253,9 @@ export async function writeField(
   logger.info({ bugId, field, oldValue, newValue }, 'ADO field written');
 
   // Re-run conformité pour mettre à jour les violations
-  try { runConformityCheck(); } catch { /* non bloquant */ }
+  if (options.runConformity !== false) {
+    try { runConformityCheck(); } catch { /* non bloquant */ }
+  }
 
   return { bug_id: bugId, field, old_value: oldValue, new_value: newValue };
 }
@@ -264,7 +275,7 @@ export async function bulkWriteField(
   // Écriture séquentielle (évite de surcharger ADO)
   for (const bugId of bugIds) {
     try {
-      await writeField(bugId, field, value);
+      await writeField(bugId, field, value, { runConformity: false });
       updated++;
     } catch (e) {
       failed.push({ bug_id: bugId, error: e instanceof Error ? e.message : 'Erreur inconnue' });
@@ -274,6 +285,7 @@ export async function bulkWriteField(
 
   // Re-run conformité une seule fois à la fin (writeField le fait déjà pour chaque bug,
   // mais le dernier appel suffit pour tous)
+  try { runConformityCheck(); } catch { /* non bloquant */ }
   logger.info({ field, updated, failed: failed.length }, 'Bulk write completed');
   return { updated, failed };
 }
