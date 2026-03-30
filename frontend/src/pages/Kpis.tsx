@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Layout } from '../components/Layout';
+import { Select } from '../components/Select';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   Cell, AreaChart, Area, PieChart, Pie, ReferenceLine,
@@ -360,71 +361,162 @@ function ClickablePie({
     <div className="flex-1 bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">{title}</div>
       <div className="relative">
-        <ResponsiveContainer width="100%" height={170}>
-          <PieChart>
-            <Pie
-              data={data} cx="50%" cy="50%" innerRadius={52} outerRadius={72}
-              dataKey="value" paddingAngle={2}
-              onClick={(entry) => { if (entry?.name) onSelect(entry.name as string); }}
-              style={{ cursor: 'pointer' }}
-            >
-              {data.map((entry, i) => (
-                <Cell key={i} fill={entry.color}
-                  opacity={selected === null || selected === entry.name ? 1 : 0.25}
-                  stroke={selected === entry.name ? entry.color : 'transparent'}
-                  strokeWidth={selected === entry.name ? 2 : 0}
-                />
-              ))}
-            </Pie>
-            <Tooltip contentStyle={ttStyle()} formatter={(v) => [`${v} bugs`]} />
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <span className="text-2xl font-mono font-bold text-[#0e1a38]">{total}</span>
-        </div>
+        {data.length === 0 ? (
+          <div className="h-[170px] flex items-center justify-center text-xs text-gray-400">
+            Aucune donnée pour ce filtre
+          </div>
+        ) : (
+          <>
+            <ResponsiveContainer width="100%" height={170}>
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={52}
+                  outerRadius={72}
+                  dataKey="value"
+                  paddingAngle={2}
+                  onClick={(entry) => { if (entry?.name) onSelect(entry.name as string); }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {data.map((entry, i) => (
+                    <Cell
+                      key={i}
+                      fill={entry.color}
+                      opacity={selected === null || selected === entry.name ? 1 : 0.25}
+                      stroke={selected === entry.name ? entry.color : 'transparent'}
+                      strokeWidth={selected === entry.name ? 2 : 0}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={ttStyle()} formatter={(v) => [String(v) + ' bugs']} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span className="text-2xl font-mono font-bold text-[#0e1a38]">{total}</span>
+            </div>
+          </>
+        )}
       </div>
       <div className="mt-2 space-y-1">
         {data.map(d => (
-          <button key={d.name} onClick={() => onSelect(d.name)}
-            className={`w-full flex items-center justify-between text-[11px] px-1.5 py-0.5 rounded transition-colors ${
-              selected === d.name ? 'bg-gray-100' : 'hover:bg-gray-50'
-            }`}
+          <button
+            key={d.name}
+            onClick={() => onSelect(d.name)}
+            className={[
+              'w-full flex items-center justify-between text-[11px] px-1.5 py-0.5 rounded transition-colors',
+              selected === d.name ? 'bg-gray-100' : 'hover:bg-gray-50',
+            ].join(' ')}
           >
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
               <span className="text-gray-600">{d.name}</span>
             </span>
             <span className="font-mono text-gray-600">
-              {d.value} <span className="text-gray-400">({Math.round((d.value / total) * 100)}%)</span>
+              {d.value} <span className="text-gray-400">({total > 0 ? Math.round((d.value / total) * 100) : 0}%)</span>
             </span>
           </button>
         ))}
       </div>
       {selected && (
-        <button onClick={() => onSelect(selected)}
+        <button
+          onClick={() => onSelect(selected)}
           className="mt-2 w-full text-[11px] text-blue-500 hover:text-blue-700 text-center"
-        >Réinitialiser le filtre ×</button>
+        >
+          Réinitialiser le filtre ×
+        </button>
       )}
     </div>
   );
 }
 
 function SuiviReleaseTab() {
-  const [version,       setVersion]       = useState('FAH_26.20');
-  const [filterState,   setFilterState]   = useState<string | null>(null);
-  const [filterTeam,    setFilterTeam]    = useState<string | null>(null);
+  const [version, setVersion] = useState('FAH_26.20');
+  const [filterState, setFilterState] = useState<string | null>(null);
+  const [filterTeam, setFilterTeam] = useState<string | null>(null);
 
   const data = RELEASE_DATA[version];
   if (!data) return null;
 
-  function toggleState(name: string) { setFilterState(prev => prev === name ? null : name); }
-  function toggleTeam(name: string)  { setFilterTeam(prev  => prev === name ? null : name); }
+  const stateColors = useMemo(
+    () => Object.fromEntries(data.byState.map(s => [s.name, s.color])) as Record<string, string>,
+    [data.byState],
+  );
+  const teamColors = useMemo(
+    () => Object.fromEntries(data.byTeam.map(t => [t.name, t.color])) as Record<string, string>,
+    [data.byTeam],
+  );
 
+  // Filtre global de la page (table + camemberts)
   const filteredBugs = useMemo(() =>
-    data.bugs.filter(b =>
+    data.bugs.filter((b) =>
       (!filterState || b.state === filterState) &&
-      (!filterTeam  || b.team  === filterTeam),
-    ), [data.bugs, filterState, filterTeam]);
+      (!filterTeam || b.team === filterTeam),
+    ),
+    [data.bugs, filterState, filterTeam],
+  );
+
+  // Camembert état : suit le filtre équipe
+  const statePieData = useMemo(() => {
+    const source = data.bugs.filter((b) => !filterTeam || b.team === filterTeam);
+    const counts = new Map<string, number>();
+
+    for (const bug of source) {
+      counts.set(bug.state, (counts.get(bug.state) ?? 0) + 1);
+    }
+
+    const ordered = data.byState.map((s) => s.name);
+    const extras = [...counts.keys()].filter((name) => !ordered.includes(name));
+
+    return [...ordered, ...extras]
+      .filter((name) => (counts.get(name) ?? 0) > 0)
+      .map((name) => ({
+        name,
+        value: counts.get(name) ?? 0,
+        color: stateColors[name] ?? '#9CA3AF',
+      }));
+  }, [data.bugs, data.byState, filterTeam, stateColors]);
+
+  // Camembert équipe : suit le filtre état
+  const teamPieData = useMemo(() => {
+    const source = data.bugs.filter((b) => !filterState || b.state === filterState);
+    const counts = new Map<string, number>();
+
+    for (const bug of source) {
+      counts.set(bug.team, (counts.get(bug.team) ?? 0) + 1);
+    }
+
+    const ordered = data.byTeam.map((t) => t.name);
+    const extras = [...counts.keys()].filter((name) => !ordered.includes(name));
+
+    return [...ordered, ...extras]
+      .filter((name) => (counts.get(name) ?? 0) > 0)
+      .map((name) => ({
+        name,
+        value: counts.get(name) ?? 0,
+        color: teamColors[name] ?? '#9CA3AF',
+      }));
+  }, [data.bugs, data.byTeam, filterState, teamColors]);
+
+  function toggleState(name: string) {
+    setFilterState((prev) => (prev === name ? null : name));
+  }
+
+  function toggleTeam(name: string) {
+    setFilterTeam((prev) => (prev === name ? null : name));
+  }
+
+  function toggleBugFilter(bug: ReleaseBug) {
+    if (filterState === bug.state && filterTeam === bug.team) {
+      setFilterState(null);
+      setFilterTeam(null);
+      return;
+    }
+
+    setFilterState(bug.state);
+    setFilterTeam(bug.team);
+  }
 
   const hasFilter = filterState !== null || filterTeam !== null;
 
@@ -434,16 +526,28 @@ function SuiviReleaseTab() {
       <div className="flex items-center gap-4 mb-5 flex-wrap">
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-500">Release :</span>
-          <select value={version} onChange={e => { setVersion(e.target.value); setFilterState(null); setFilterTeam(null); }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-[#0e1a38] font-medium focus:outline-none focus:ring-2 focus:ring-blue-200"
+          <Select
+            value={version}
+            onChange={(e) => {
+              setVersion(e.target.value);
+              setFilterState(null);
+              setFilterTeam(null);
+            }}
+            className="w-auto min-w-[160px]"
           >
-            {VERSIONS_LIST.map(v => <option key={v} value={v}>{v}</option>)}
-          </select>
+            {VERSIONS_LIST.map((v) => <option key={v} value={v}>{v}</option>)}
+          </Select>
         </div>
         {hasFilter && (
-          <button onClick={() => { setFilterState(null); setFilterTeam(null); }}
+          <button
+            onClick={() => {
+              setFilterState(null);
+              setFilterTeam(null);
+            }}
             className="text-xs text-blue-500 hover:text-blue-700 border border-blue-200 rounded-full px-2.5 py-1"
-          >Réinitialiser tous les filtres ×</button>
+          >
+            Réinitialiser tous les filtres ×
+          </button>
         )}
         <span className="text-xs text-gray-400 ml-auto">
           {filteredBugs.length} / {data.bugs.length} bug{data.bugs.length > 1 ? 's' : ''}
@@ -453,8 +557,8 @@ function SuiviReleaseTab() {
 
       {/* Pie charts cliquables */}
       <div className="flex gap-4 mb-5">
-        <ClickablePie data={data.byState} title="Par état — cliquer pour filtrer"  selected={filterState} onSelect={toggleState} />
-        <ClickablePie data={data.byTeam}  title="Par équipe — cliquer pour filtrer" selected={filterTeam}  onSelect={toggleTeam}  />
+        <ClickablePie data={statePieData} title="Par état — cliquer pour filtrer" selected={filterState} onSelect={toggleState} />
+        <ClickablePie data={teamPieData} title="Par équipe — cliquer pour filtrer" selected={filterTeam} onSelect={toggleTeam} />
       </div>
 
       {/* Table */}
@@ -470,21 +574,37 @@ function SuiviReleaseTab() {
             </tr>
           </thead>
           <tbody>
-            {filteredBugs.map(bug => (
-              <tr key={bug.id} className="border-b border-gray-50 hover:bg-blue-50/40 transition-colors">
-                <td className="px-4 py-2 font-mono text-gray-400">{bug.id}</td>
-                <td className="px-4 py-2 text-gray-700 max-w-0" style={{ maxWidth: 420 }}>
-                  <span className="truncate block" title={bug.title}>{bug.title}</span>
-                </td>
-                <td className="px-4 py-2">
-                  <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold border ${STATE_BADGE[bug.state] ?? 'bg-gray-50 text-gray-500'}`}>
-                    {bug.state}
-                  </span>
-                </td>
-                <td className="px-4 py-2 text-gray-600">{bug.team}</td>
-                <td className="px-4 py-2 font-mono text-gray-400 text-[10px]">{bug.sprint}</td>
-              </tr>
-            ))}
+            {filteredBugs.map((bug) => {
+              const rowActive = filterState === bug.state && filterTeam === bug.team;
+              return (
+                <tr
+                  key={bug.id}
+                  onClick={() => toggleBugFilter(bug)}
+                  className={[
+                    'border-b border-gray-50 transition-colors cursor-pointer',
+                    rowActive ? 'bg-blue-50' : 'hover:bg-blue-50/40',
+                  ].join(' ')}
+                  title="Cliquer pour filtrer sur cet état + cette équipe"
+                >
+                  <td className="px-4 py-2 font-mono text-gray-400">{bug.id}</td>
+                  <td className="px-4 py-2 text-gray-700 max-w-0" style={{ maxWidth: 420 }}>
+                    <span className="truncate block" title={bug.title}>{bug.title}</span>
+                  </td>
+                  <td className="px-4 py-2">
+                    <span
+                      className={[
+                        'inline-flex px-2 py-0.5 rounded text-[10px] font-semibold border',
+                        STATE_BADGE[bug.state] ?? 'bg-gray-50 text-gray-500',
+                      ].join(' ')}
+                    >
+                      {bug.state}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-gray-600">{bug.team}</td>
+                  <td className="px-4 py-2 font-mono text-gray-400 text-[10px]">{bug.sprint}</td>
+                </tr>
+              );
+            })}
             {filteredBugs.length === 0 && (
               <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400 text-xs">Aucun bug pour ces filtres</td></tr>
             )}
@@ -648,3 +768,5 @@ export default function Kpis() {
     </Layout>
   );
 }
+
+

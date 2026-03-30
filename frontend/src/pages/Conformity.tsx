@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { MultiSelect } from '../components/MultiSelect';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { Select } from '../components/Select';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -261,19 +262,21 @@ function EditableCell({ field, currentValue, isRowEditing, editValue, isFocusFie
   return (
     <div onClick={e => e.stopPropagation()}>
       {field === 'priority' ? (
-        <select
+        <Select
           ref={inputRef as React.RefObject<HTMLSelectElement>}
           value={editValue}
           onChange={e => onChangeValue(e.target.value)}
           onClick={e => e.stopPropagation()}
-          className="text-xs border border-amber-400 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-300/50 bg-amber-50 w-16"
+          tone="editing"
+          uiSize="sm"
+          className="w-16"
         >
-          <option value="">—</option>
+          <option value="">-</option>
           <option value="1">1</option>
           <option value="2">2</option>
           <option value="3">3</option>
           <option value="4">4</option>
-        </select>
+        </Select>
       ) : (
         <input
           ref={inputRef as React.RefObject<HTMLInputElement>}
@@ -1033,38 +1036,41 @@ export default function Conformity() {
           <div className="w-px h-6 bg-white/15 shrink-0" />
 
           {/* Sélecteur champ */}
-          <select
+          <Select
             value={bulkField}
             onChange={e => {
               const f = e.target.value as WritableField;
               setBulkField(f);
               setBulkValue(f === 'priority' ? '2' : f === 'area_path' ? (areaPaths[0] ?? '') : '');
             }}
-            className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 shrink-0"
+            tone="inverse"
+            className="shrink-0 min-w-[180px]"
           >
             <option value="priority">Priorité</option>
             <option value="version_souhaitee">Version souhaitée</option>
             <option value="integration_build">Build</option>
             <option value="area_path">Zone</option>
-          </select>
+          </Select>
 
           {/* Valeur */}
           {bulkField === 'priority' ? (
-            <select
+            <Select
               value={bulkValue}
               onChange={e => setBulkValue(e.target.value)}
-              className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 w-20 shrink-0"
+              tone="inverse"
+              className="w-20 shrink-0"
             >
               <option value="1">1</option>
               <option value="2">2</option>
               <option value="3">3</option>
               <option value="4">4</option>
-            </select>
+            </Select>
           ) : bulkField === 'area_path' ? (
-            <select
+            <Select
               value={bulkValue}
               onChange={e => setBulkValue(e.target.value)}
-              className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 shrink-0 max-w-[200px]"
+              tone="inverse"
+              className="shrink-0 max-w-[200px]"
             >
               <optgroup label="Équipes">
                 {REAL_TEAMS.map(t => {
@@ -1077,13 +1083,13 @@ export default function Conformity() {
                   <option key={p} value={p}>{areaPathLabel(p)}</option>
                 ))}
               </optgroup>
-            </select>
+            </Select>
           ) : (
             <input
               type="text"
               value={bulkValue}
               onChange={e => setBulkValue(e.target.value)}
-              placeholder="Nouvelle valeur…"
+              placeholder="Nouvelle valeur..."
               className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 flex-1 min-w-0"
             />
           )}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
+import { Select } from '../components/Select';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -198,22 +199,24 @@ function EditCell({ label, fieldKey, editVal, origVal, editMode, focusMe, type, 
         {isDirty && <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">modifié</span>}
       </div>
       {type === 'select' ? (
-        <select
+        <Select
           value={editVal}
           onChange={e => onChange(fieldKey, e.target.value)}
           autoFocus={focusMe}
-          className={`w-full text-xs border rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 font-mono transition-all
-            ${isDirty ? 'border-amber-400 focus:ring-amber-200' : 'border-gray-200 focus:ring-[#1E63B6]/20 focus:border-[#1E63B6]/50'}`}
+          tone={isDirty ? 'editing' : 'default'}
+          uiSize="sm"
+          className="w-full font-mono"
         >
           {options?.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
+        </Select>
       ) : type === 'area_select' ? (
-        <select
+        <Select
           value={editVal}
           onChange={e => onChange(fieldKey, e.target.value)}
           autoFocus={focusMe}
-          className={`w-full text-xs border rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 transition-all
-            ${isDirty ? 'border-amber-400 focus:ring-amber-200' : 'border-gray-200 focus:ring-[#1E63B6]/20 focus:border-[#1E63B6]/50'}`}
+          tone={isDirty ? 'editing' : 'default'}
+          uiSize="sm"
+          className="w-full"
         >
           <optgroup label="Équipes">
             {REAL_TEAMS.map(t => { const p = teamAreaPath(t); return <option key={p} value={p}>{t}</option>; })}
@@ -223,7 +226,7 @@ function EditCell({ label, fieldKey, editVal, origVal, editMode, focusMe, type, 
               <option key={p} value={p}>{areaPathLabel(p)}</option>
             ))}
           </optgroup>
-        </select>
+        </Select>
       ) : type === 'autocomplete' ? (
         <div className="relative">
           <input

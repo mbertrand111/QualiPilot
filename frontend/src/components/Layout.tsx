@@ -2,7 +2,7 @@ import { useLocation, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
-// ─── Icons ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Icons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function HomeIcon({ className }: { className?: string }) {
   return (
@@ -61,7 +61,7 @@ function ChevronLeftIcon({ className }: { className?: string }) {
   );
 }
 
-// ─── Nav config ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Nav config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const NAV_ITEMS = [
   { path: '/',           icon: HomeIcon,    label: 'Tableau de bord', exact: true },
@@ -69,10 +69,10 @@ const NAV_ITEMS = [
   { path: '/conformity', icon: AlertIcon,   label: 'Anomalies',        exact: false },
   { path: '/kpis',       icon: ChartIcon,   label: 'KPIs',             exact: false },
   { path: '/history',    icon: ClockIcon,   label: 'Historique',       exact: false },
-  { path: '/settings',   icon: CogIcon,     label: 'Paramètres',       exact: false },
+  { path: '/settings',   icon: CogIcon,     label: 'ParamÃ¨tres',       exact: false },
 ];
 
-// ─── Layout ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface LayoutProps {
   children: ReactNode;
@@ -81,10 +81,10 @@ interface LayoutProps {
 }
 
 function formatSyncDate(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return 'â€”';
   const d = new Date(iso);
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })
-    + ' — '
+    + ' â€” '
     + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
 
@@ -123,7 +123,7 @@ export function Layout({ children, title, actions }: LayoutProps) {
   return (
     <div className="flex h-screen bg-[#f7f8fc] overflow-hidden font-sans">
 
-      {/* ── Sidebar ── */}
+      {/* â”€â”€ Sidebar â”€â”€ */}
       <aside className={[
         'relative bg-[#0b1e45] flex flex-col shrink-0 shadow-2xl z-10 transition-all duration-200',
         collapsed ? 'w-16' : 'w-60',
@@ -141,10 +141,10 @@ export function Layout({ children, title, actions }: LayoutProps) {
           )}
         </div>
 
-        {/* Toggle — à cheval sur le bord droit */}
+        {/* Toggle â€” Ã  cheval sur le bord droit */}
         <button
           onClick={() => setCollapsed(c => !c)}
-          title={collapsed ? 'Agrandir la navigation' : 'Réduire la navigation'}
+          title={collapsed ? 'Agrandir la navigation' : 'RÃ©duire la navigation'}
           className="absolute top-[30px] -right-3 z-20 flex items-center justify-center w-6 h-6 rounded-full bg-[#0b1e45]/80 backdrop-blur-sm border border-white/15 text-white/50 hover:text-white hover:border-white/30 transition-colors shadow-md"
         >
           <ChevronLeftIcon className={`w-3 h-3 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`} />
@@ -189,7 +189,7 @@ export function Layout({ children, title, actions }: LayoutProps) {
         {/* Sync status footer */}
         <div className={['border-t border-white/[0.07]', collapsed ? 'px-0 py-4 flex justify-center' : 'px-5 py-4'].join(' ')}>
           {collapsed ? (
-            <span className="relative flex h-2 w-2 shrink-0" title={`Dernière sync : ${formatSyncDate(lastSyncAt)}`}>
+            <span className="relative flex h-2 w-2 shrink-0" title={`DerniÃ¨re sync : ${formatSyncDate(lastSyncAt)}`}>
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#66D2DB] opacity-60"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-[#66D2DB]"></span>
             </span>
@@ -200,7 +200,7 @@ export function Layout({ children, title, actions }: LayoutProps) {
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-[#66D2DB]"></span>
               </span>
               <div className="min-w-0">
-                <div className="text-[11px] text-white/40 font-medium">Dernière sync</div>
+                <div className="text-[11px] text-white/40 font-medium">DerniÃ¨re sync</div>
                 <div className="text-[11px] text-white/50 font-mono truncate">{formatSyncDate(lastSyncAt)}</div>
               </div>
             </div>
@@ -208,12 +208,12 @@ export function Layout({ children, title, actions }: LayoutProps) {
         </div>
       </aside>
 
-      {/* ── Main area ── */}
+      {/* â”€â”€ Main area â”€â”€ */}
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Page header */}
         {(title || actions) && (
-          <header className="bg-white/80 backdrop-blur-sm border-b border-gray-100/80 px-8 py-4 flex items-center justify-between shrink-0">
+          <header className="bg-white/80 backdrop-blur-sm border-b border-gray-100/80 px-8 py-4 min-h-[72px] flex items-center justify-between shrink-0">
             <h1 className="text-[21px] font-bold text-[#0F3E8A] tracking-tight">{title}</h1>
             {actions && (
               <div className="flex items-center gap-3">{actions}</div>
