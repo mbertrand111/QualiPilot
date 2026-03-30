@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
+import { SyncButton } from '../components/SyncButton';
+import { useSyncAndEvaluate } from '../hooks/useSyncAndEvaluate';
 
 interface HomeStats {
   open_bugs: {
@@ -12,14 +14,6 @@ interface HomeStats {
   };
   resolved_bugs: { total: number };
   anomalies: { total: number };
-}
-
-function SyncIcon({ spinning }: { spinning: boolean }) {
-  return (
-    <svg className={`w-4 h-4 shrink-0 ${spinning ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-    </svg>
-  );
 }
 
 interface StatCardProps {
@@ -55,62 +49,48 @@ function StatCard({ label, value, sub, color, onClick }: StatCardProps) {
 export function Home() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<HomeStats | null>(null);
-  const [syncing,   setSyncing]   = useState(false);
-  const [syncResult, setSyncResult] = useState<{ synced: number } | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadStats = useCallback(() => {
     fetch('/api/stats/home').then(r => r.json()).then(setStats).catch(() => {});
   }, []);
 
-  async function handleSync() {
-    setSyncing(true);
-    setSyncResult(null);
-    setSyncError(null);
-    try {
-      const res = await fetch('/api/sync', { method: 'POST' });
-      if (!res.ok) throw new Error(`Erreur ${res.status}`);
-      const result = await res.json();
-      setSyncResult({ synced: result.synced });
-      window.dispatchEvent(new CustomEvent('qualipilot:synced', { detail: { lastSyncAt: result.lastSyncAt } }));
-      fetch('/api/stats/home').then(r => r.json()).then(setStats).catch(() => {});
-    } catch (e) {
-      setSyncError(e instanceof Error ? e.message : 'Erreur inconnue');
-    } finally {
-      setSyncing(false);
-    }
-  }
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
+  const {
+    step: syncStep,
+    result: syncResult,
+    error: syncError,
+    run: runSync,
+    clearResult: clearSyncResult,
+    clearError: clearSyncError,
+  } = useSyncAndEvaluate(loadStats);
 
   const ob = stats?.open_bugs;
   const rb = stats?.resolved_bugs;
 
   return (
     <Layout title="Tableau de bord" actions={
-      <button
-        onClick={handleSync}
-        disabled={syncing}
-        className={[
-          'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all',
-          syncing ? 'bg-blue-400 cursor-wait' : 'bg-[#1E63B6] hover:bg-[#0F3E8A] shadow-md shadow-[#1E63B6]/25',
-        ].join(' ')}
-      >
-        <SyncIcon spinning={syncing} />
-        {syncing ? 'Synchronisation…' : 'Synchroniser'}
-      </button>
+      <SyncButton step={syncStep} onClick={runSync} />
     }>
 
       {/* Sync banners */}
       {syncResult && (
         <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-5 py-3 text-sm text-blue-700">
-          <SyncIcon spinning={false} />
-          <span>Synchronisation terminée — <strong>{syncResult.synced}</strong> bugs importés.</span>
-          <button onClick={() => setSyncResult(null)} className="ml-auto text-blue-400 hover:text-blue-600 text-lg leading-none">×</button>
+          <span>
+            Synchronisation terminée — <strong>{syncResult.synced}</strong> bugs importés,{' '}
+            <strong>{syncResult.checkedBugs}</strong> analysés,{' '}
+            <strong className="text-red-600">{syncResult.newViolations}</strong> nouvelles anomalies,{' '}
+            <strong className="text-green-700">{syncResult.resolvedViolations}</strong> résolues.
+          </span>
+          <button onClick={clearSyncResult} className="ml-auto text-blue-400 hover:text-blue-600 text-lg leading-none">×</button>
         </div>
       )}
       {syncError && (
         <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
           <span>Erreur : {syncError}</span>
-          <button onClick={() => setSyncError(null)} className="text-red-400 hover:text-red-600">×</button>
+          <button onClick={clearSyncError} className="text-red-400 hover:text-red-600">×</button>
         </div>
       )}
 

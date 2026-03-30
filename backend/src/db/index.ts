@@ -85,6 +85,27 @@ function migrateNormalizeTeamNames(db: Database.Database): void {
   })();
 }
 
+function migrateAutoRemediationSchema(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS auto_remediation_runs (
+      id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+      trigger_source             TEXT NOT NULL,
+      run_at                     TEXT NOT NULL,
+      skipped                    INTEGER NOT NULL DEFAULT 0 CHECK(skipped IN (0, 1)),
+      priority_attempted         INTEGER NOT NULL DEFAULT 0,
+      priority_updated           INTEGER NOT NULL DEFAULT 0,
+      priority_failed            INTEGER NOT NULL DEFAULT 0,
+      integration_attempted      INTEGER NOT NULL DEFAULT 0,
+      integration_updated        INTEGER NOT NULL DEFAULT 0,
+      integration_failed         INTEGER NOT NULL DEFAULT 0,
+      total_updated              INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+
+  try { db.exec(`ALTER TABLE auto_fix_audit ADD COLUMN rule_code TEXT`); } catch { /* déjà présente */ }
+  try { db.exec(`ALTER TABLE auto_fix_audit ADD COLUMN run_id INTEGER REFERENCES auto_remediation_runs(id)`); } catch { /* déjà présente */ }
+}
+
 function migrateRules(db: Database.Database): void {
   // Supprimer les violations liées aux anciennes règles
   const deleteViolations = db.prepare(
@@ -128,6 +149,7 @@ export function getDb(): Database.Database {
   migrateAddCreatedBy(_db);
   migrateSprintValues(_db);
   migrateNormalizeTeamNames(_db);
+  migrateAutoRemediationSchema(_db);
 
   logger.info({ databasePath: config.databasePath }, 'Database initialized');
   return _db;

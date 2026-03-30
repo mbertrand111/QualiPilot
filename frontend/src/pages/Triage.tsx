@@ -4,6 +4,8 @@ import { Layout } from '../components/Layout';
 import { MultiSelect } from '../components/MultiSelect';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { Select } from '../components/Select';
+import { SyncButton } from '../components/SyncButton';
+import { useSyncAndEvaluate } from '../hooks/useSyncAndEvaluate';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -209,11 +211,6 @@ export default function Triage() {
   });
   const [dir,  setDir]  = useState<SortDir>(() => searchParams.get('dir') === 'asc' ? 'asc' : 'desc');
 
-  // Sync
-  const [syncing,    setSyncing]    = useState(false);
-  const [syncResult, setSyncResult] = useState<{ synced: number } | null>(null);
-  const [syncError,  setSyncError]  = useState<string | null>(null);
-
   // Sélection multiple
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
@@ -224,7 +221,7 @@ export default function Triage() {
   const [savingBulk, setSavingBulk]   = useState(false);
   const [bulkError, setBulkError]     = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadTriageStats = useCallback(() => {
     const params = new URLSearchParams();
     if (filterStates.length)   params.set('state',    filterStates.join(','));
     if (filterSprints.length)  params.set('sprint',   filterSprints.join(','));
@@ -238,27 +235,13 @@ export default function Triage() {
   }, [filterStates, filterSprints, filterBugTypes, filterId, filterTitle, filterVersion, filterFoundIn, filterBuild]);
 
   useEffect(() => {
+    loadTriageStats();
+  }, [loadTriageStats]);
+
+  useEffect(() => {
     fetch('/api/bugs/meta/sprints').then(r => r.json()).then(setSprints).catch(() => {});
     fetch('/api/bugs/meta/areas').then(r => r.json()).then(setAreaPaths).catch(() => {});
   }, []);
-
-  async function handleSync() {
-    setSyncing(true);
-    setSyncResult(null);
-    setSyncError(null);
-    try {
-      const res = await fetch('/api/sync', { method: 'POST' });
-      if (!res.ok) throw new Error(`Erreur ${res.status}`);
-      const result = await res.json();
-      setSyncResult(result);
-      window.dispatchEvent(new CustomEvent('qualipilot:synced', { detail: { lastSyncAt: result.lastSyncAt } }));
-      load(1);
-    } catch (e) {
-      setSyncError(e instanceof Error ? e.message : 'Erreur inconnue');
-    } finally {
-      setSyncing(false);
-    }
-  }
 
   const load = useCallback(async (p: number) => {
     setLoading(true);
@@ -310,6 +293,18 @@ export default function Triage() {
       setLoading(false);
     }
   }, [activeCard, filterTeams, filterZones, filterStates, filterSprints, filterBugTypes, filterId, filterTitle, filterVersion, filterFoundIn, filterBuild, sort, dir]);
+
+  const {
+    step: syncStep,
+    result: syncResult,
+    error: syncError,
+    run: runSync,
+    clearResult: clearSyncResult,
+    clearError: clearSyncError,
+  } = useSyncAndEvaluate(async () => {
+    await load(1);
+    loadTriageStats();
+  });
 
   useEffect(() => { load(1); }, [load]);
 
@@ -390,40 +385,23 @@ export default function Triage() {
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
-    <Layout title="Bugs" actions={
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-gray-400 font-mono">{total.toLocaleString('fr-FR')} bugs</span>
-        <button
-          onClick={handleSync}
-          disabled={syncing}
-          className={[
-            'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all border',
-            syncing
-              ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-wait'
-              : 'bg-white text-gray-600 border-gray-200 hover:border-[#1E63B6] hover:text-[#1E63B6] hover:bg-blue-50',
-          ].join(' ')}
-        >
-          <svg className={`w-4 h-4 shrink-0 ${syncing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-          </svg>
-          {syncing ? 'Synchronisation…' : 'Synchroniser'}
-        </button>
-      </div>
-    }>
+    <Layout title="Bugs" actions={<SyncButton step={syncStep} onClick={runSync} />}>
 
       {syncResult && (
         <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-5 py-3 text-sm text-blue-700">
-          <svg className="w-4 h-4 shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-          </svg>
-          <span>Synchronisation terminée — <strong>{syncResult.synced}</strong> bugs importés depuis Azure DevOps.</span>
-          <button onClick={() => setSyncResult(null)} className="ml-auto text-blue-400 hover:text-blue-600 text-lg leading-none">×</button>
+          <span>
+            Synchronisation terminée — <strong>{syncResult.synced}</strong> bugs importés,{' '}
+            <strong>{syncResult.checkedBugs}</strong> analysés,{' '}
+            <strong className="text-red-600">{syncResult.newViolations}</strong> nouvelles anomalies,{' '}
+            <strong className="text-green-700">{syncResult.resolvedViolations}</strong> résolues.
+          </span>
+          <button onClick={clearSyncResult} className="ml-auto text-blue-400 hover:text-blue-600 text-lg leading-none">×</button>
         </div>
       )}
       {syncError && (
         <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
-          <span>Erreur de synchronisation : {syncError}</span>
-          <button onClick={() => setSyncError(null)} className="ml-2 text-red-400 hover:text-red-600">×</button>
+          <span>Erreur de synchronisation/évaluation : {syncError}</span>
+          <button onClick={clearSyncError} className="ml-2 text-red-400 hover:text-red-600">×</button>
         </div>
       )}
       {bulkError && (

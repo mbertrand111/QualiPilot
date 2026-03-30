@@ -16,24 +16,56 @@ export interface AutoRemediationRunResult {
 
 let running = false;
 
+const RULE_BY_FIELD: Record<'priority' | 'integration_build', string> = {
+  priority: 'PRIORITY_CHECK',
+  integration_build: 'INTEGRATION_BUILD_NOT_EMPTIED',
+};
+
 function logAutoFix(
   workItemId: number,
+  ruleCode: string,
   field: string,
   oldValue: string | null,
   newValue: string | null,
   trigger: AutoRemediationTrigger,
+  runId: number,
 ): void {
   const db = getDb();
   db.prepare(`
-    INSERT INTO auto_fix_audit (work_item_id, field, old_value, new_value, trigger_source, performed_at)
-    VALUES (?, ?, ?, ?, ?, datetime('now'))
-  `).run(workItemId, field, oldValue, newValue, trigger);
+    INSERT INTO auto_fix_audit (work_item_id, rule_code, field, old_value, new_value, run_id, trigger_source, performed_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+  `).run(workItemId, ruleCode, field, oldValue, newValue, runId, trigger);
 }
 
 export async function runAutoRemediation(trigger: AutoRemediationTrigger): Promise<AutoRemediationRunResult> {
   const runAt = new Date().toISOString();
+  const db = getDb();
+
+  const runInsert = db.prepare(`
+    INSERT INTO auto_remediation_runs (
+      trigger_source, run_at, skipped,
+      priority_attempted, priority_updated, priority_failed,
+      integration_attempted, integration_updated, integration_failed,
+      total_updated
+    ) VALUES (?, ?, 0, 0, 0, 0, 0, 0, 0, 0)
+  `);
+  const runId = Number(runInsert.run(trigger, runAt).lastInsertRowid);
+
+  const persistRun = db.prepare(`
+    UPDATE auto_remediation_runs
+    SET skipped = ?,
+        priority_attempted = ?,
+        priority_updated = ?,
+        priority_failed = ?,
+        integration_attempted = ?,
+        integration_updated = ?,
+        integration_failed = ?,
+        total_updated = ?
+    WHERE id = ?
+  `);
+
   if (running) {
-    return {
+    const skippedResult: AutoRemediationRunResult = {
       trigger,
       runAt,
       skipped: true,
@@ -41,10 +73,21 @@ export async function runAutoRemediation(trigger: AutoRemediationTrigger): Promi
       integration_build: { attempted: 0, updated: 0, failed: 0 },
       totalUpdated: 0,
     };
+    persistRun.run(
+      1,
+      skippedResult.priority.attempted,
+      skippedResult.priority.updated,
+      skippedResult.priority.failed,
+      skippedResult.integration_build.attempted,
+      skippedResult.integration_build.updated,
+      skippedResult.integration_build.failed,
+      skippedResult.totalUpdated,
+      runId,
+    );
+    return skippedResult;
   }
 
   running = true;
-  const db = getDb();
 
   const result: AutoRemediationRunResult = {
     trigger,
@@ -68,7 +111,15 @@ export async function runAutoRemediation(trigger: AutoRemediationTrigger): Promi
       try {
         const write = await writeField(row.id, 'priority', 2, { runConformity: false });
         result.priority.updated += 1;
-        logAutoFix(row.id, 'priority', write.old_value, write.new_value, trigger);
+        logAutoFix(
+          row.id,
+          RULE_BY_FIELD.priority,
+          'priority',
+          write.old_value,
+          write.new_value,
+          trigger,
+          runId,
+        );
       } catch (e) {
         result.priority.failed += 1;
         logger.warn({ err: e, bugId: row.id, field: 'priority', trigger }, 'Auto-remediation write failed');
@@ -89,7 +140,15 @@ export async function runAutoRemediation(trigger: AutoRemediationTrigger): Promi
       try {
         const write = await writeField(row.id, 'integration_build', '', { runConformity: false });
         result.integration_build.updated += 1;
-        logAutoFix(row.id, 'integration_build', write.old_value, write.new_value, trigger);
+        logAutoFix(
+          row.id,
+          RULE_BY_FIELD.integration_build,
+          'integration_build',
+          write.old_value,
+          write.new_value,
+          trigger,
+          runId,
+        );
       } catch (e) {
         result.integration_build.failed += 1;
         logger.warn({ err: e, bugId: row.id, field: 'integration_build', trigger }, 'Auto-remediation write failed');
@@ -103,7 +162,17 @@ export async function runAutoRemediation(trigger: AutoRemediationTrigger): Promi
     logger.info({ result }, 'Auto-remediation completed');
     return result;
   } finally {
+    persistRun.run(
+      result.skipped ? 1 : 0,
+      result.priority.attempted,
+      result.priority.updated,
+      result.priority.failed,
+      result.integration_build.attempted,
+      result.integration_build.updated,
+      result.integration_build.failed,
+      result.totalUpdated,
+      runId,
+    );
     running = false;
   }
 }
-

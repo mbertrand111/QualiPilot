@@ -1,6 +1,7 @@
 import { getDb } from '../db';
 import { fetchAllBugs, CUSTOM_FIELD_REFS, type AdoBug } from './azureDevOps';
 import logger from '../logger';
+import { syncReleaseVersionSettings } from './releaseVersionSettings';
 
 // ─── Field extractors ─────────────────────────────────────────────────────────
 
@@ -174,6 +175,7 @@ export async function runSync(): Promise<{ synced: number; lastSyncAt: string }>
   });
 
   syncAll(bugs.map(mapBug));
+  syncReleaseVersionSettings(db);
 
   const lastSyncAt = new Date().toISOString();
   logger.info({ synced: bugs.length, lastSyncAt }, 'Sync completed');

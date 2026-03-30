@@ -6,6 +6,7 @@ import conformityRouter from './conformity';
 import writeRouter from './write';
 import statsRouter from './stats';
 import kpisRouter from './kpis';
+import settingsRouter from './settings';
 
 const router = Router();
 
@@ -16,5 +17,6 @@ router.use('/', conformityRouter);
 router.use('/', writeRouter);
 router.use('/', statsRouter);
 router.use('/', kpisRouter);
+router.use('/', settingsRouter);
 
 export default router;

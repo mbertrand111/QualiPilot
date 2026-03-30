@@ -95,16 +95,41 @@ CREATE TABLE IF NOT EXISTS ado_write_audit (
   performed_at  TEXT DEFAULT (datetime('now'))
 );
 
+-- Journal des exécutions d'auto-remédiation (sync/scheduler)
+CREATE TABLE IF NOT EXISTS auto_remediation_runs (
+  id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+  trigger_source             TEXT NOT NULL,
+  run_at                     TEXT NOT NULL,
+  skipped                    INTEGER NOT NULL DEFAULT 0 CHECK(skipped IN (0, 1)),
+  priority_attempted         INTEGER NOT NULL DEFAULT 0,
+  priority_updated           INTEGER NOT NULL DEFAULT 0,
+  priority_failed            INTEGER NOT NULL DEFAULT 0,
+  integration_attempted      INTEGER NOT NULL DEFAULT 0,
+  integration_updated        INTEGER NOT NULL DEFAULT 0,
+  integration_failed         INTEGER NOT NULL DEFAULT 0,
+  total_updated              INTEGER NOT NULL DEFAULT 0
+);
+
 -- Audit des corrections automatiques
 CREATE TABLE IF NOT EXISTS auto_fix_audit (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   work_item_id    INTEGER NOT NULL,
+  rule_code       TEXT,
   field           TEXT NOT NULL,
   old_value       TEXT,
   new_value       TEXT,
+  run_id          INTEGER REFERENCES auto_remediation_runs(id),
   trigger_source  TEXT NOT NULL,
   performed_at    TEXT DEFAULT (datetime('now')),
   acknowledged_at TEXT
+);
+
+-- Parametrage des versions majeures visibles dans les filtres KPI "Suivi par release"
+CREATE TABLE IF NOT EXISTS kpi_release_version_filters (
+  major_version TEXT PRIMARY KEY,
+  selected      INTEGER NOT NULL DEFAULT 1 CHECK(selected IN (0, 1)),
+  discovered_at TEXT DEFAULT (datetime('now')),
+  updated_at    TEXT DEFAULT (datetime('now'))
 );
 
 -- Données initiales : 8 équipes

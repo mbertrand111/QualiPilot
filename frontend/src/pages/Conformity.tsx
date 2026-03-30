@@ -4,6 +4,8 @@ import { Layout } from '../components/Layout';
 import { MultiSelect } from '../components/MultiSelect';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { Select } from '../components/Select';
+import { SyncButton } from '../components/SyncButton';
+import { useSyncAndEvaluate } from '../hooks/useSyncAndEvaluate';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,13 +32,6 @@ interface ViolationsResponse {
   limit: number;
   violations: Violation[];
   rule_counts: { rule_code: string; count: number }[];
-}
-
-interface RunResult {
-  checkedBugs: number;
-  newViolations: number;
-  resolvedViolations: number;
-  runAt: string;
 }
 
 interface EditRowState {
@@ -424,15 +419,6 @@ export default function Conformity() {
   const [sort, setSort] = useState('changed_date');
   const [dir,  setDir]  = useState<SortDir>('desc');
 
-  // Synchronisation + évaluation combinées
-  type SyncEvalStep = 'idle' | 'syncing' | 'evaluating';
-  const [syncEvalStep, setSyncEvalStep] = useState<SyncEvalStep>('idle');
-  const [syncEvalResult, setSyncEvalResult] = useState<{
-    synced: number; lastSyncAt: string;
-    checkedBugs: number; newViolations: number; resolvedViolations: number;
-  } | null>(null);
-  const [syncEvalError, setSyncEvalError] = useState<string | null>(null);
-
   // Sélection multiple
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
@@ -489,6 +475,17 @@ export default function Conformity() {
 
   useEffect(() => { load(1); }, [load]);
 
+  const {
+    step: syncStep,
+    result: syncResult,
+    error: syncError,
+    run: runSync,
+    clearResult: clearSyncResult,
+    clearError: clearSyncError,
+  } = useSyncAndEvaluate(async () => {
+    await load(1);
+  });
+
   // Désélectionner les bugs absents de la page courante
   useEffect(() => {
     if (violations.length > 0) {
@@ -496,29 +493,6 @@ export default function Conformity() {
       setSelectedIds(prev => new Set([...prev].filter(id => pageIds.has(id))));
     }
   }, [violations]);
-
-  async function handleSyncAndEval() {
-    setSyncEvalStep('syncing');
-    setSyncEvalResult(null);
-    setSyncEvalError(null);
-    try {
-      const syncRes = await fetch('/api/sync', { method: 'POST' });
-      if (!syncRes.ok) throw new Error(`Erreur sync ${syncRes.status}`);
-      const syncData = await syncRes.json();
-
-      setSyncEvalStep('evaluating');
-      const evalRes = await fetch('/api/conformity/run', { method: 'POST' });
-      if (!evalRes.ok) throw new Error(`Erreur évaluation ${evalRes.status}`);
-      const evalData: RunResult = await evalRes.json();
-
-      setSyncEvalResult({ ...syncData, ...evalData });
-      load(1);
-    } catch (e) {
-      setSyncEvalError(e instanceof Error ? e.message : 'Erreur inconnue');
-    } finally {
-      setSyncEvalStep('idle');
-    }
-  }
 
   function handleSort(col: string) {
     if (sort === col) setDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -669,46 +643,33 @@ export default function Conformity() {
 
   const hasFilters  = filterTeams.length || filterZones.length || filterSprints.length || filterBugTypes.length || filterRules.length || filterStates.length || filterId || filterTitle || filterVersion || filterFoundIn || filterBuild;
   const totalPages  = Math.ceil(total / LIMIT);
-  const busy = syncEvalStep !== 'idle';
 
   const headerActions = (
-    <button
-      onClick={handleSyncAndEval}
-      disabled={busy}
-      className={[
-        'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all',
-        busy ? 'bg-[#1E63B6]/60 cursor-wait' : 'bg-[#1E63B6] hover:bg-[#0F3E8A] shadow-md shadow-[#1E63B6]/25',
-      ].join(' ')}
-    >
-      <svg className={`w-4 h-4 shrink-0 ${syncEvalStep === 'syncing' ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-      </svg>
-      {syncEvalStep === 'syncing' ? 'Synchronisation…' : syncEvalStep === 'evaluating' ? 'Évaluation…' : 'Synchroniser et évaluer'}
-    </button>
+    <SyncButton step={syncStep} onClick={runSync} />
   );
 
   return (
     <Layout title="Anomalies de conformité" actions={headerActions}>
 
       {/* Résultat sync + évaluation */}
-      {syncEvalResult && (
+      {syncResult && (
         <div className="mb-4 flex items-center gap-3 bg-green-50 border border-green-100 rounded-2xl px-5 py-3 text-sm text-green-700">
           <svg className="w-4 h-4 shrink-0 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
           </svg>
           <span>
-            <strong>{syncEvalResult.synced}</strong> bugs importés —{' '}
-            <strong>{syncEvalResult.checkedBugs}</strong> analysés,{' '}
-            <strong className="text-red-600">{syncEvalResult.newViolations}</strong> nouvelles anomalies,{' '}
-            <strong className="text-green-600">{syncEvalResult.resolvedViolations}</strong> résolues.
+            <strong>{syncResult.synced}</strong> bugs importés —{' '}
+            <strong>{syncResult.checkedBugs}</strong> analysés,{' '}
+            <strong className="text-red-600">{syncResult.newViolations}</strong> nouvelles anomalies,{' '}
+            <strong className="text-green-600">{syncResult.resolvedViolations}</strong> résolues.
           </span>
-          <button onClick={() => setSyncEvalResult(null)} className="ml-auto text-green-400 hover:text-green-600 text-lg leading-none">×</button>
+          <button onClick={clearSyncResult} className="ml-auto text-green-400 hover:text-green-600 text-lg leading-none">×</button>
         </div>
       )}
-      {syncEvalError && (
+      {syncError && (
         <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
-          <span>Erreur : {syncEvalError}</span>
-          <button onClick={() => setSyncEvalError(null)} className="ml-2 text-red-400 hover:text-red-600">×</button>
+          <span>Erreur : {syncError}</span>
+          <button onClick={clearSyncError} className="ml-2 text-red-400 hover:text-red-600">×</button>
         </div>
       )}
       {saveError && (

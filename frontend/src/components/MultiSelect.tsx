@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+﻿import { useState, useRef, useEffect } from 'react';
 
 interface MultiSelectProps {
   label: string;
@@ -89,7 +89,7 @@ export function MultiSelect({ label, options, selected, onChange, renderOption, 
             )}
           </div>
 
-          {/* Options — avec ou sans groupes */}
+          {/* Options â€” avec ou sans groupes */}
           <ul className="max-h-64 overflow-y-auto py-1">
             {groupBy ? (
               groups.map(({ label: groupLabel, items }) => (
@@ -154,3 +154,4 @@ export function MultiSelect({ label, options, selected, onChange, renderOption, 
     </div>
   );
 }
+

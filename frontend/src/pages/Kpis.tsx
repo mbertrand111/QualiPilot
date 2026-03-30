@@ -1,5 +1,8 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { Layout } from '../components/Layout';
+import { MultiSelect } from '../components/MultiSelect';
+import { SyncButton } from '../components/SyncButton';
+import { useSyncAndEvaluate } from '../hooks/useSyncAndEvaluate';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   Cell, AreaChart, Area, PieChart, Pie, ReferenceLine, LabelList,
@@ -14,7 +17,7 @@ const TABS = [
   { key: 'terrain-returns', label: 'Retours terrain' },
   { key: 'suivi-release',  label: 'Suivi par release'    },
   { key: 'closed-by-pi',  label: 'Bugs fermes par PI' },
-  { key: 'team-backlogs', label: 'Backlogs equipes' },
+  { key: 'team-backlogs', label: 'Backlogs équipes' },
 ] as const;
 type TabKey = typeof TABS[number]['key'];
 
@@ -89,6 +92,61 @@ interface PointBacklogResponse {
   bugs: ReleaseBug[];
 }
 
+interface ReleaseVersionSettingsResponse {
+  versions: Array<{ version: string; selected: boolean }>;
+  alwaysVisible: string[];
+}
+
+interface PersistedReleaseFilters {
+  products: ReleaseProduct[];
+  versions: string[];
+  patches: string[];
+  states: string[];
+  team: string | null;
+}
+
+function majorVersionMatchesProduct(majorVersion: string, product: ReleaseProduct): boolean {
+  if (majorVersion === 'vide' || majorVersion === 'Non concerne') return true;
+  const isFah = /^FAH_/i.test(majorVersion);
+  if (product === 'live') return isFah;
+  if (product === 'onpremise') return !isFah;
+  if (product === 'hors_version') return majorVersion === 'vide' || majorVersion === 'Non concerne';
+  return true;
+}
+
+const RELEASE_FILTERS_STORAGE_KEY = 'kpis.suiviRelease.filters.v1';
+
+function loadPersistedReleaseFilters(): PersistedReleaseFilters {
+  try {
+    const raw = localStorage.getItem(RELEASE_FILTERS_STORAGE_KEY);
+    if (!raw) return { products: [], versions: [], patches: [], states: [], team: null };
+    const parsed = JSON.parse(raw) as Partial<PersistedReleaseFilters> & { state?: unknown };
+
+    const statesFromArray = Array.isArray(parsed.states)
+      ? parsed.states.filter((s): s is string => typeof s === 'string')
+      : [];
+    const legacyState = typeof parsed.state === 'string' ? [parsed.state] : [];
+
+    return {
+      products: Array.isArray(parsed.products) ? parsed.products.filter((p): p is ReleaseProduct => typeof p === 'string') : [],
+      versions: Array.isArray(parsed.versions) ? parsed.versions.filter((v): v is string => typeof v === 'string') : [],
+      patches: Array.isArray(parsed.patches) ? parsed.patches.filter((v): v is string => typeof v === 'string') : [],
+      states: statesFromArray.length > 0 ? statesFromArray : legacyState,
+      team: typeof parsed.team === 'string' ? parsed.team : null,
+    };
+  } catch {
+    return { products: [], versions: [], patches: [], states: [], team: null };
+  }
+}
+
+function savePersistedReleaseFilters(filters: PersistedReleaseFilters): void {
+  try {
+    localStorage.setItem(RELEASE_FILTERS_STORAGE_KEY, JSON.stringify(filters));
+  } catch {
+    // no-op
+  }
+}
+
 // Tab 4 â€” Bugs fermes par PI
 const CLOSED_PRODUIT = [
   { pi: '24-25 PI6', live: 68, livePatch: 28, onpremise: 48, onpremisePatch:  0, horsVersion: 0, nonCategorise: 30, total: 174 },
@@ -106,7 +164,7 @@ const CLOSED_EQUIPE = [
   { pi: '25-26 PI4', COCO: 11, 'GO FAHST': 12, 'JURASSIC BACK': 36, 'MAGIC SYSTEM': 36, 'MELI MELO': 12, 'NULL.REF':  3, PIXELS: 24, LACE:  1, total: 135 },
 ];
 
-// Tab 5 - Retours terrain (annuel par exercice)
+// Tab 5 - Backlogs équipes (objectifs à configurer dans Paramètres)
 interface TerrainReturnsRow {
   exercise: string;
   label: string;
@@ -125,7 +183,7 @@ const TERRAIN_RETURNS_IMAGE_ROWS: TerrainReturnsRow[] = [
   { exercise: '25-26', label: '25-26 a fin 03/26', start: '2025-08-04', end: '2026-07-14', asOf: '2026-03-31', entrants: 175, corrected: 334, isCurrent: true },
 ];
 
-// Tab 5 â€” Backlogs equipes (objectifs Ã  configurer dans ParamÃ¨tres)
+// Tab 5 - Backlogs équipes (objectifs à configurer dans Paramètres)
 interface TeamBacklog {
   team:        string;
   objective:   number;
@@ -171,14 +229,6 @@ const ADO_WORK_ITEM_BASE = 'https://dev.azure.com/Isagri-Prod-Progiciels/Isagri_
 
 function ttStyle() {
   return { fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' };
-}
-
-function SyncIcon({ spinning }: { spinning: boolean }) {
-  return (
-    <svg className={`w-4 h-4 shrink-0 ${spinning ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-    </svg>
-  );
 }
 
 const STATE_BADGE: Record<string, string> = {
@@ -421,44 +471,84 @@ function BacklogEvoTab({ refreshKey }: { refreshKey: number }) {
 // â”€â”€â”€ Tab 3 : Suivi par release â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function ClickablePie({
-  data, title, selected, onSelect,
+  data, title, selected, onSelect, onClear, compactLegendCount,
 }: {
   data: { name: string; value: number; color: string }[];
   title: string;
-  selected: string | null;
+  selected: string | string[] | null;
   onSelect: (name: string) => void;
+  onClear?: () => void;
+  compactLegendCount?: number;
 }) {
-  const total = data.reduce((s, d) => s + d.value, 0);
+  const [legendExpanded, setLegendExpanded] = useState(false);
+  const pieData = useMemo(
+    () => data
+      .map((d) => ({ ...d, value: Number(d.value) || 0 }))
+      .filter((d) => d.value > 0),
+    [data],
+  );
+  const selectedSet = useMemo(() => {
+    if (Array.isArray(selected)) return new Set(selected);
+    if (typeof selected === 'string' && selected.length > 0) return new Set([selected]);
+    return new Set<string>();
+  }, [selected]);
+  const firstSelected = useMemo(
+    () => pieData.find((d) => selectedSet.has(d.name))?.name ?? null,
+    [pieData, selectedSet],
+  );
+  const total = pieData.reduce((s, d) => s + d.value, 0);
+  const maxLegendItems = compactLegendCount && compactLegendCount > 0 ? compactLegendCount : pieData.length;
+  const shouldCollapseLegend = pieData.length > maxLegendItems;
+
+  useEffect(() => {
+    setLegendExpanded(false);
+  }, [pieData.length, title]);
+
+  const visibleLegendData = useMemo(() => {
+    if (!shouldCollapseLegend || legendExpanded) return pieData;
+    const head = pieData.slice(0, maxLegendItems);
+    if (!firstSelected || head.some((d) => d.name === firstSelected)) return head;
+    const selectedEntry = pieData.find((d) => d.name === firstSelected);
+    if (!selectedEntry) return head;
+    return [
+      selectedEntry,
+      ...pieData.filter((d) => d.name !== firstSelected).slice(0, Math.max(0, maxLegendItems - 1)),
+    ];
+  }, [shouldCollapseLegend, legendExpanded, pieData, maxLegendItems, firstSelected]);
+
   return (
     <div className="flex-1 bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">{title}</div>
-      <div className="relative">
-        {data.length === 0 ? (
-          <div className="h-[170px] flex items-center justify-center text-xs text-gray-400">
-            Aucune donnee pour ce filtre
-          </div>
-        ) : (
-          <>
-            <ResponsiveContainer width="100%" height={170}>
+      {pieData.length === 0 ? (
+        <div className="h-[170px] flex items-center justify-center text-xs text-gray-400">
+          Aucune donnée pour ce filtre
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-col gap-3 lg:flex-row lg:items-start">
+          <div className="relative lg:w-[46%] lg:min-w-[220px]">
+            <ResponsiveContainer width="100%" height={188}>
               <PieChart>
                 <Pie
-                  data={data}
+                  data={pieData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={52}
-                  outerRadius={72}
+                  innerRadius={44}
+                  outerRadius={76}
                   dataKey="value"
+                  isAnimationActive={false}
+                  startAngle={90}
+                  endAngle={-270}
                   paddingAngle={2}
                   onClick={(entry) => { if (entry?.name) onSelect(entry.name as string); }}
                   style={{ cursor: 'pointer' }}
                 >
-                  {data.map((entry, i) => (
+                  {pieData.map((entry, i) => (
                     <Cell
                       key={i}
                       fill={entry.color}
-                      opacity={selected === null || selected === entry.name ? 1 : 0.25}
-                      stroke={selected === entry.name ? entry.color : 'transparent'}
-                      strokeWidth={selected === entry.name ? 2 : 0}
+                      opacity={selectedSet.size === 0 || selectedSet.has(entry.name) ? 1 : 0.45}
+                      stroke={selectedSet.has(entry.name) ? '#0e1a38' : '#ffffff'}
+                      strokeWidth={selectedSet.has(entry.name) ? 2 : 1}
                     />
                   ))}
                 </Pie>
@@ -468,55 +558,78 @@ function ClickablePie({
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <span className="text-2xl font-mono font-bold text-[#0e1a38]">{total}</span>
             </div>
-          </>
-        )}
-      </div>
-      <div className="mt-2 space-y-1">
-        {data.map(d => (
-          <button
-            key={d.name}
-            onClick={() => onSelect(d.name)}
-            className={[
-              'w-full flex items-center justify-between text-[11px] px-1.5 py-0.5 rounded transition-colors',
-              selected === d.name ? 'bg-gray-100' : 'hover:bg-gray-50',
-            ].join(' ')}
-          >
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-              <span className="text-gray-600">{d.name}</span>
-            </span>
-            <span className="font-mono text-gray-600">
-              {d.value} <span className="text-gray-400">({total > 0 ? Math.round((d.value / total) * 100) : 0}%)</span>
-            </span>
-          </button>
-        ))}
-      </div>
-      {selected && (
-        <button
-          onClick={() => onSelect(selected)}
-          className="mt-2 w-full text-[11px] text-blue-500 hover:text-blue-700 text-center"
-        >
-          Reinitialiser le filtre
-        </button>
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="space-y-1">
+              {visibleLegendData.map(d => (
+                <button
+                  key={d.name}
+                  onClick={() => onSelect(d.name)}
+                  className={[
+                    'w-full flex items-center justify-between text-[11px] px-1.5 py-0.5 rounded transition-colors',
+                    selectedSet.has(d.name) ? 'bg-gray-100' : 'hover:bg-gray-50',
+                  ].join(' ')}
+                >
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                    <span className="text-gray-600 truncate">{d.name}</span>
+                  </span>
+                  <span className="font-mono text-gray-600 shrink-0">
+                    {d.value} <span className="text-gray-400">({total > 0 ? Math.round((d.value / total) * 100) : 0}%)</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {shouldCollapseLegend && (
+              <button
+                type="button"
+                onClick={() => setLegendExpanded((prev) => !prev)}
+                className="w-full text-[11px] text-gray-500 hover:text-gray-700 text-center pt-1"
+              >
+                {legendExpanded ? 'Voir moins' : `Voir plus (${pieData.length - visibleLegendData.length})`}
+              </button>
+            )}
+
+            {selectedSet.size > 0 && (
+              <button
+                onClick={() => {
+                  if (onClear) onClear();
+                  else if (firstSelected) onSelect(firstSelected);
+                }}
+                className="mt-2 w-full text-[11px] text-blue-500 hover:text-blue-700 text-center"
+              >
+                Réinitialiser le filtre
+              </button>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
 function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
+  const persisted = useMemo(() => loadPersistedReleaseFilters(), []);
+
   const [allBugs, setAllBugs] = useState<ReleaseBug[]>([]);
   const [products, setProducts] = useState<Array<{ value: ReleaseProduct; label: string }>>([
     { value: 'live', label: 'Live' },
     { value: 'onpremise', label: 'On prem' },
     { value: 'hors_version', label: 'Hors version' },
   ]);
-  const [selectedProducts, setSelectedProducts] = useState<ReleaseProduct[]>([]);
-  const [selectedVersions, setSelectedVersions] = useState<string[]>([]);
-  const [selectedPatches, setSelectedPatches] = useState<string[]>([]);
+  const [configuredMajorVersions, setConfiguredMajorVersions] = useState<string[]>([]);
+  const [alwaysVisibleVersions, setAlwaysVisibleVersions] = useState<string[]>(['vide', 'Non concerne']);
+
+  const [selectedProducts, setSelectedProducts] = useState<ReleaseProduct[]>(persisted.products);
+  const [selectedVersions, setSelectedVersions] = useState<string[]>(persisted.versions);
+  const [selectedPatches, setSelectedPatches] = useState<string[]>(persisted.patches);
+  const [selectedStates, setSelectedStates] = useState<string[]>(persisted.states);
+  const [filterTeam, setFilterTeam] = useState<string | null>(persisted.team);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filterState, setFilterState] = useState<string | null>(null);
-  const [filterTeam, setFilterTeam] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -524,21 +637,30 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch('/api/kpis/point-backlog');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const payload = await res.json() as PointBacklogResponse;
+        const [releaseRes, settingsRes] = await Promise.all([
+          fetch('/api/kpis/point-backlog'),
+          fetch('/api/settings/release-versions'),
+        ]);
+        if (!releaseRes.ok) throw new Error(`HTTP ${releaseRes.status}`);
+        if (!settingsRes.ok) throw new Error(`HTTP ${settingsRes.status}`);
+
+        const releasePayload = await releaseRes.json() as PointBacklogResponse;
+        const settingsPayload = await settingsRes.json() as ReleaseVersionSettingsResponse;
 
         if (cancelled) return;
 
-        if (Array.isArray(payload.products) && payload.products.length > 0) {
-          setProducts(payload.products.filter((p) => p.value !== 'uncategorized'));
+        if (Array.isArray(releasePayload.products) && releasePayload.products.length > 0) {
+          setProducts(releasePayload.products.filter((p) => p.value !== 'uncategorized'));
         }
-        setAllBugs(Array.isArray(payload.bugs) ? payload.bugs : []);
-        setSelectedProducts([]);
-        setSelectedVersions([]);
-        setSelectedPatches([]);
-        setFilterState(null);
-        setFilterTeam(null);
+        setAllBugs(Array.isArray(releasePayload.bugs) ? releasePayload.bugs : []);
+        setConfiguredMajorVersions(
+          Array.isArray(settingsPayload.versions)
+            ? settingsPayload.versions.filter((v) => v.selected).map((v) => v.version)
+            : [],
+        );
+        setAlwaysVisibleVersions(
+          Array.isArray(settingsPayload.alwaysVisible) ? settingsPayload.alwaysVisible : ['vide', 'Non concerne'],
+        );
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Erreur inconnue');
       } finally {
@@ -549,22 +671,6 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
     return () => { cancelled = true; };
   }, [refreshKey]);
 
-  function toggleProduct(product: ReleaseProduct) {
-    setSelectedProducts((prev) => (
-      prev.includes(product) ? prev.filter((v) => v !== product) : [...prev, product]
-    ));
-  }
-  function toggleVersion(versionValue: string) {
-    setSelectedVersions((prev) => (
-      prev.includes(versionValue) ? prev.filter((v) => v !== versionValue) : [...prev, versionValue]
-    ));
-  }
-  function togglePatch(patch: string) {
-    setSelectedPatches((prev) => (
-      prev.includes(patch) ? prev.filter((v) => v !== patch) : [...prev, patch]
-    ));
-  }
-
   const releaseFilteredByProduct = useMemo(() => {
     if (selectedProducts.length === 0) return allBugs;
     const selected = new Set(selectedProducts);
@@ -572,14 +678,21 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
   }, [allBugs, selectedProducts]);
 
   const versionOptions = useMemo(() => {
-    const patchSelected = new Set(selectedPatches);
-    const source = releaseFilteredByProduct.filter((bug) => (
-      patchSelected.size === 0 || (bug.patch !== null && patchSelected.has(bug.patch))
-    ));
+    const configuredSet = new Set(configuredMajorVersions);
+    const alwaysVisibleSet = new Set(alwaysVisibleVersions);
+    const source = releaseFilteredByProduct;
+    const selectedProductSet = new Set(selectedProducts);
 
-    const values = new Set<string>(source.map((bug) => bug.majorVersion));
-    values.add('vide');
-    values.add('Non concerne');
+    const values = new Set<string>();
+    for (const bug of source) {
+      const major = bug.majorVersion;
+      const allowedByProduct = selectedProductSet.size === 0
+        || [...selectedProductSet].some((p) => majorVersionMatchesProduct(major, p));
+      if (alwaysVisibleSet.has(major) || (configuredSet.has(major) && allowedByProduct)) {
+        values.add(bug.majorVersion);
+      }
+    }
+    for (const alwaysVisible of alwaysVisibleVersions) values.add(alwaysVisible);
 
     const ordered = [...values].sort((a, b) => {
       if (a === 'vide') return 1;
@@ -589,17 +702,22 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
       return a.localeCompare(b, 'fr', { numeric: true, sensitivity: 'base' });
     });
     return ordered;
-  }, [releaseFilteredByProduct, selectedPatches]);
+  }, [releaseFilteredByProduct, configuredMajorVersions, alwaysVisibleVersions, selectedProducts]);
+
+  const effectiveVersionSet = useMemo(
+    () => new Set(selectedVersions.length > 0 ? selectedVersions : versionOptions),
+    [selectedVersions, versionOptions],
+  );
 
   const patchOptions = useMemo(() => {
-    const versionSelected = new Set(selectedVersions);
-    const source = releaseFilteredByProduct.filter((bug) => (
-      versionSelected.size === 0 || versionSelected.has(bug.majorVersion)
-    ));
-
+    const source = releaseFilteredByProduct.filter((bug) => effectiveVersionSet.has(bug.majorVersion));
     return [...new Set(source.map((bug) => bug.patch).filter((p): p is string => Boolean(p)))]
       .sort((a, b) => a.localeCompare(b, 'fr', { numeric: true, sensitivity: 'base' }));
-  }, [releaseFilteredByProduct, selectedVersions]);
+  }, [releaseFilteredByProduct, effectiveVersionSet]);
+
+  useEffect(() => {
+    setSelectedProducts((prev) => prev.filter((p) => products.some((opt) => opt.value === p)));
+  }, [products]);
 
   useEffect(() => {
     setSelectedVersions((prev) => prev.filter((v) => versionOptions.includes(v)));
@@ -611,23 +729,17 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
 
   const releaseFilteredBugs = useMemo(() => {
     const productSet = new Set(selectedProducts);
-    const versionSet = new Set(selectedVersions);
     const patchSet = new Set(selectedPatches);
-
     return allBugs.filter((bug) => (
       (productSet.size === 0 || productSet.has(bug.product)) &&
-      (versionSet.size === 0 || versionSet.has(bug.majorVersion)) &&
+      effectiveVersionSet.has(bug.majorVersion) &&
       (patchSet.size === 0 || (bug.patch !== null && patchSet.has(bug.patch)))
     ));
-  }, [allBugs, selectedProducts, selectedVersions, selectedPatches]);
+  }, [allBugs, selectedProducts, selectedPatches, effectiveVersionSet]);
 
-  // Filtre global de la page (table + camemberts)
-  const filteredBugs = useMemo(() =>
-    releaseFilteredBugs.filter((b) =>
-      (!filterState || b.state === filterState) &&
-      (!filterTeam || b.team === filterTeam),
-    ),
-    [releaseFilteredBugs, filterState, filterTeam],
+  const filteredBugs = useMemo(
+    () => releaseFilteredBugs.filter((b) => (selectedStates.length === 0 || selectedStates.includes(b.state)) && (!filterTeam || b.team === filterTeam)),
+    [releaseFilteredBugs, selectedStates, filterTeam],
   );
 
   const statePalette: Record<string, string> = {
@@ -642,52 +754,48 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
     'Non affecte': '#9CA3AF',
   };
 
-  // Camembert Ã©tat : suit le filtre Ã©quipe
   const statePieData = useMemo(() => {
     const source = releaseFilteredBugs.filter((b) => !filterTeam || b.team === filterTeam);
     const counts = new Map<string, number>();
-
-    for (const bug of source) {
-      counts.set(bug.state, (counts.get(bug.state) ?? 0) + 1);
-    }
+    for (const bug of source) counts.set(bug.state, (counts.get(bug.state) ?? 0) + 1);
 
     const ordered = ['New', 'Active', 'Resolved', 'Closed'];
     const extras = [...counts.keys()].filter((name) => !ordered.includes(name));
-
     return [...ordered, ...extras]
       .filter((name) => (counts.get(name) ?? 0) > 0)
-      .map((name) => ({
-        name,
-        value: counts.get(name) ?? 0,
-        color: statePalette[name] ?? '#9CA3AF',
-      }));
+      .map((name) => ({ name, value: counts.get(name) ?? 0, color: statePalette[name] ?? '#9CA3AF' }));
   }, [releaseFilteredBugs, filterTeam]);
 
-  // Camembert Ã©quipe : suit le filtre Ã©tat
-  const teamPieData = useMemo(() => {
-    const source = releaseFilteredBugs.filter((b) => !filterState || b.state === filterState);
-    const counts = new Map<string, number>();
+  const stateFilterOptions = useMemo(
+    () => statePieData.map((d) => d.name),
+    [statePieData],
+  );
 
-    for (const bug of source) {
-      counts.set(bug.team, (counts.get(bug.team) ?? 0) + 1);
-    }
+  const teamPieData = useMemo(() => {
+    const source = releaseFilteredBugs.filter((b) => selectedStates.length === 0 || selectedStates.includes(b.state));
+    const counts = new Map<string, number>();
+    for (const bug of source) counts.set(bug.team, (counts.get(bug.team) ?? 0) + 1);
 
     const ordered = [...counts.keys()].sort((a, b) => (
       (counts.get(b) ?? 0) - (counts.get(a) ?? 0) || a.localeCompare(b, 'fr', { sensitivity: 'base' })
     ));
-    const extras = [...counts.keys()].filter((name) => !ordered.includes(name));
+    return ordered.map((name) => ({ name, value: counts.get(name) ?? 0, color: teamPalette[name] ?? '#9CA3AF' }));
+  }, [releaseFilteredBugs, selectedStates]);
 
-    return [...ordered, ...extras]
-      .filter((name) => (counts.get(name) ?? 0) > 0)
-      .map((name) => ({
-        name,
-        value: counts.get(name) ?? 0,
-        color: teamPalette[name] ?? '#9CA3AF',
-      }));
-  }, [releaseFilteredBugs, filterState]);
+  useEffect(() => {
+    setSelectedStates((prev) => prev.filter((stateName) => statePieData.some((d) => d.name === stateName)));
+  }, [statePieData]);
+
+  useEffect(() => {
+    if (filterTeam && !teamPieData.some((d) => d.name === filterTeam)) {
+      setFilterTeam(null);
+    }
+  }, [filterTeam, teamPieData]);
 
   function toggleState(name: string) {
-    setFilterState((prev) => (prev === name ? null : name));
+    setSelectedStates((prev) => (
+      prev.includes(name) ? prev.filter((stateName) => stateName !== name) : [...prev, name]
+    ));
   }
 
   function toggleTeam(name: string) {
@@ -695,136 +803,185 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
   }
 
   function toggleBugFilter(bug: ReleaseBug) {
-    if (filterState === bug.state && filterTeam === bug.team) {
-      setFilterState(null);
+    if (selectedStates.length === 1 && selectedStates[0] === bug.state && filterTeam === bug.team) {
+      setSelectedStates([]);
       setFilterTeam(null);
       return;
     }
-
-    setFilterState(bug.state);
+    setSelectedStates([bug.state]);
     setFilterTeam(bug.team);
   }
 
   const hasReleaseFilter = selectedProducts.length > 0 || selectedVersions.length > 0 || selectedPatches.length > 0;
-  const hasFilter = hasReleaseFilter || filterState !== null || filterTeam !== null;
+  const hasFilter = hasReleaseFilter || selectedStates.length > 0 || filterTeam !== null;
+  const productLabelByValue = useMemo(
+    () => new Map(products.map((p) => [p.value, p.label] as const)),
+    [products],
+  );
+
+  useEffect(() => {
+    savePersistedReleaseFilters({
+      products: selectedProducts,
+      versions: selectedVersions,
+      patches: selectedPatches,
+      states: selectedStates,
+      team: filterTeam,
+    });
+  }, [selectedProducts, selectedVersions, selectedPatches, selectedStates, filterTeam]);
 
   return (
     <div>
-      {/* Filtres */}
       <div className="mb-5 bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm text-gray-500 mr-2">Produit:</span>
-          {products.map((product) => {
-            const active = selectedProducts.includes(product.value);
-            return (
+        <div className="flex items-center gap-3 flex-wrap">
+          <MultiSelect
+            label="Produit"
+            options={products.map((p) => p.value)}
+            selected={selectedProducts}
+            onChange={(next) => setSelectedProducts(next.filter((v): v is ReleaseProduct => products.some((p) => p.value === v) && v !== 'uncategorized'))}
+            renderOption={(value) => productLabelByValue.get(value as ReleaseProduct) ?? value}
+          />
+          <MultiSelect
+            label="Version"
+            options={versionOptions}
+            selected={selectedVersions}
+            onChange={setSelectedVersions}
+          />
+          <MultiSelect
+            label="Patch"
+            options={patchOptions}
+            selected={selectedPatches}
+            onChange={setSelectedPatches}
+          />
+          <MultiSelect
+            label="État"
+            options={stateFilterOptions}
+            selected={selectedStates}
+            onChange={setSelectedStates}
+          />
+
+          <div className="ml-auto flex items-center gap-2">
+            {hasFilter && (
               <button
-                key={product.value}
-                type="button"
-                onClick={() => toggleProduct(product.value)}
-                className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
-                  active
-                    ? 'bg-[#1E40AF] text-white border-[#1E40AF]'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-700'
-                }`}
+                onClick={() => {
+                  setSelectedProducts([]);
+                  setSelectedVersions([]);
+                  setSelectedPatches([]);
+                  setSelectedStates([]);
+                  setFilterTeam(null);
+                }}
+                className="text-xs text-blue-500 hover:text-blue-700 border border-blue-200 rounded-full px-2.5 py-1"
               >
-                {product.label}
+                Réinitialiser tous les filtres
               </button>
-            );
-          })}
-        </div>
-
-        <div className="flex items-start gap-2">
-          <span className="text-sm text-gray-500 mt-1 whitespace-nowrap">Version:</span>
-          <div className="flex flex-wrap gap-1.5">
-            {versionOptions.map((versionOpt) => {
-              const active = selectedVersions.includes(versionOpt);
-              return (
-                <button
-                  key={versionOpt}
-                  type="button"
-                  onClick={() => toggleVersion(versionOpt)}
-                  className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
-                    active
-                      ? 'bg-[#1E40AF] text-white border-[#1E40AF]'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-700'
-                  }`}
-                >
-                  {versionOpt}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex items-start gap-2">
-          <span className="text-sm text-gray-500 mt-1 whitespace-nowrap">Patch:</span>
-          <div className="flex flex-wrap gap-1.5">
-            {patchOptions.length === 0 && (
-              <span className="text-xs text-gray-400 mt-1">Aucun patch pour cette selection</span>
             )}
-            {patchOptions.map((patch) => {
-              const active = selectedPatches.includes(patch);
-              return (
-                <button
-                  key={patch}
-                  type="button"
-                  onClick={() => togglePatch(patch)}
-                  className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
-                    active
-                      ? 'bg-[#1E40AF] text-white border-[#1E40AF]'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-700'
-                  }`}
-                >
-                  {patch}
-                </button>
-              );
-            })}
+            <span className="text-xs text-gray-400 whitespace-nowrap">
+              {filteredBugs.length} / {releaseFilteredBugs.length} bug{releaseFilteredBugs.length > 1 ? 's' : ''}
+              {hasFilter ? ' (filtres)' : ''}
+            </span>
           </div>
         </div>
 
         {hasFilter && (
-          <button
-            onClick={() => {
-              setSelectedProducts([]);
-              setSelectedVersions([]);
-              setSelectedPatches([]);
-              setFilterState(null);
-              setFilterTeam(null);
-            }}
-            className="text-xs text-blue-500 hover:text-blue-700 border border-blue-200 rounded-full px-2.5 py-1"
-          >
-            Reinitialiser tous les filtres
-          </button>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {selectedProducts.map((p) => (
+              <button
+                key={`product-${p}`}
+                type="button"
+                onClick={() => setSelectedProducts((prev) => prev.filter((v) => v !== p))}
+                className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] text-blue-700 hover:border-blue-300"
+                title="Supprimer ce filtre produit"
+              >
+                <span>{`Produit: ${productLabelByValue.get(p) ?? p}`}</span>
+                <span className="leading-none">×</span>
+              </button>
+            ))}
+            {selectedVersions.map((v) => (
+              <button
+                key={`version-${v}`}
+                type="button"
+                onClick={() => setSelectedVersions((prev) => prev.filter((x) => x !== v))}
+                className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] text-indigo-700 hover:border-indigo-300"
+                title="Supprimer ce filtre version"
+              >
+                <span>{`Version: ${v}`}</span>
+                <span className="leading-none">×</span>
+              </button>
+            ))}
+            {selectedPatches.map((p) => (
+              <button
+                key={`patch-${p}`}
+                type="button"
+                onClick={() => setSelectedPatches((prev) => prev.filter((x) => x !== p))}
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] text-emerald-700 hover:border-emerald-300"
+                title="Supprimer ce filtre patch"
+              >
+                <span>{`Patch: ${p}`}</span>
+                <span className="leading-none">×</span>
+              </button>
+            ))}
+            {selectedStates.map((stateName) => (
+              <button
+                key={`state-${stateName}`}
+                type="button"
+                onClick={() => setSelectedStates((prev) => prev.filter((x) => x !== stateName))}
+                className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] text-amber-700 hover:border-amber-300"
+                title="Supprimer ce filtre d'état"
+              >
+                <span>{`État: ${stateName}`}</span>
+                <span className="leading-none">×</span>
+              </button>
+            ))}
+            {filterTeam && (
+              <button
+                type="button"
+                onClick={() => setFilterTeam(null)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] text-violet-700 hover:border-violet-300"
+                title="Supprimer ce filtre d'équipe"
+              >
+                <span>{`Équipe: ${filterTeam}`}</span>
+                <span className="leading-none">×</span>
+              </button>
+            )}
+          </div>
         )}
-        <span className="text-xs text-gray-400 ml-auto">
-          {filteredBugs.length} / {releaseFilteredBugs.length} bug{releaseFilteredBugs.length > 1 ? 's' : ''}
-          {hasFilter ? ' (filtres)' : ''}
-        </span>
+
       </div>
-      {loading && <div className="text-xs text-gray-400 mb-3">Chargement des donnees...</div>}
+
+      {loading && <div className="text-xs text-gray-400 mb-3">Chargement des données...</div>}
       {error && <div className="text-xs text-red-500 mb-3">Erreur KPI Point backlog: {error}</div>}
 
-      {/* Pie charts cliquables */}
       <div className="flex gap-4 mb-5">
-        <ClickablePie data={statePieData} title="Par etat - cliquer pour filtrer" selected={filterState} onSelect={toggleState} />
-        <ClickablePie data={teamPieData} title="Par equipe - cliquer pour filtrer" selected={filterTeam} onSelect={toggleTeam} />
+        <ClickablePie
+          data={statePieData}
+          title="Par état - cliquer pour filtrer"
+          selected={selectedStates}
+          onSelect={toggleState}
+          onClear={() => setSelectedStates([])}
+        />
+        <ClickablePie
+          data={teamPieData}
+          title="Par équipe - cliquer pour filtrer"
+          selected={filterTeam}
+          onSelect={toggleTeam}
+          onClear={() => setFilterTeam(null)}
+          compactLegendCount={5}
+        />
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
               <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-16">ID</th>
               <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Titre</th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-24">Etat</th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-32">Equipe</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-24">État</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-32">Équipe</th>
               <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-28">Sprint</th>
             </tr>
           </thead>
           <tbody>
             {filteredBugs.map((bug) => {
-              const rowActive = filterState === bug.state && filterTeam === bug.team;
+              const rowActive = selectedStates.length === 1 && selectedStates[0] === bug.state && filterTeam === bug.team;
               return (
                 <tr
                   key={bug.id}
@@ -833,19 +990,17 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
                     'border-b border-gray-50 transition-colors cursor-pointer',
                     rowActive ? 'bg-blue-50' : 'hover:bg-blue-50/40',
                   ].join(' ')}
-                  title="Cliquer pour filtrer sur cet etat + cette equipe"
+                  title="Cliquer pour filtrer sur cet état + cette équipe"
                 >
                   <td className="px-4 py-2 font-mono text-gray-400">{bug.id}</td>
                   <td className="px-4 py-2 text-gray-700 max-w-0" style={{ maxWidth: 420 }}>
                     <span className="truncate block" title={bug.title}>{bug.title}</span>
                   </td>
                   <td className="px-4 py-2">
-                    <span
-                      className={[
-                        'inline-flex px-2 py-0.5 rounded text-[10px] font-semibold border',
-                        STATE_BADGE[bug.state] ?? 'bg-gray-50 text-gray-500',
-                      ].join(' ')}
-                    >
+                    <span className={[
+                      'inline-flex px-2 py-0.5 rounded text-[10px] font-semibold border',
+                      STATE_BADGE[bug.state] ?? 'bg-gray-50 text-gray-500',
+                    ].join(' ')}>
                       {bug.state}
                     </span>
                   </td>
@@ -987,8 +1142,8 @@ function ClosedByPiTab({ refreshKey }: { refreshKey: number }) {
 }
 
 function TerrainReturnsTab({ refreshKey }: { refreshKey: number }) {
-  const entrantsColor = '#1E40AF';
-  const correctedColor = '#0F766E';
+  const entrantsColor = '#60A5FA';
+  const correctedColor = '#F472B6';
   const rows = TERRAIN_RETURNS_IMAGE_ROWS;
   const asOfDate = rows.find((r) => r.isCurrent)?.asOf ?? '';
   const [selectedExercises, setSelectedExercises] = useState<string[]>([]);
@@ -1409,13 +1564,10 @@ function TeamBacklogsTab({ refreshKey }: { refreshKey: number }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4">
         <p className="text-xs text-gray-400">
-          Bugs GC uniquement (hors [CO] et [IW]) - les bugs New et Active uniquement rentrent dans le compteur
+          Bugs GC uniquement (hors [CO] et [IW]) - les bugs New et Active uniquement rentrent dans le compteur.
         </p>
-        <span className="text-[11px] text-amber-600 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-full shrink-0">
-          Objectifs a configurer dans Parametres
-        </span>
       </div>
       {loading && <div className="text-xs text-gray-400 mb-3">Chargement des donnees...</div>}
       {error && <div className="text-xs text-red-500 mb-3">Erreur KPI Backlogs equipes: {error}</div>}
@@ -1666,57 +1818,39 @@ function TeamBacklogsTab({ refreshKey }: { refreshKey: number }) {
 export default function Kpis() {
   const [tab, setTab] = useState<TabKey>('defect-debt');
   const [refreshKey, setRefreshKey] = useState(0);
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ synced: number } | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
 
-  async function handleSync() {
-    setSyncing(true);
-    setSyncResult(null);
-    setSyncError(null);
-    try {
-      const res = await fetch('/api/sync', { method: 'POST' });
-      if (!res.ok) throw new Error(`Erreur ${res.status}`);
-      const result = await res.json();
-      setSyncResult({ synced: result.synced });
-      window.dispatchEvent(new CustomEvent('qualipilot:synced', { detail: { lastSyncAt: result.lastSyncAt } }));
-      setRefreshKey((k) => k + 1);
-    } catch (e) {
-      setSyncError(e instanceof Error ? e.message : 'Erreur inconnue');
-    } finally {
-      setSyncing(false);
-    }
-  }
+  const {
+    step: syncStep,
+    result: syncResult,
+    error: syncError,
+    run: runSync,
+    clearResult: clearSyncResult,
+    clearError: clearSyncError,
+  } = useSyncAndEvaluate(async () => {
+    setRefreshKey((k) => k + 1);
+  });
 
   const headerActions = (
-    <button
-      onClick={handleSync}
-      disabled={syncing}
-      className={[
-        'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all border',
-        syncing
-          ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-wait'
-          : 'bg-white text-gray-600 border-gray-200 hover:border-[#1E63B6] hover:text-[#1E63B6] hover:bg-blue-50',
-      ].join(' ')}
-    >
-      <SyncIcon spinning={syncing} />
-      {syncing ? 'Synchronisation...' : 'Synchroniser'}
-    </button>
+    <SyncButton step={syncStep} onClick={runSync} />
   );
 
   return (
     <Layout title="KPIs & Suivi qualite" actions={headerActions} contentClassName="px-7 pb-7 pt-0">
       {syncResult && (
         <div className="mt-5 mb-4 flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-5 py-3 text-sm text-blue-700">
-          <SyncIcon spinning={false} />
-          <span>Synchronisation terminee - <strong>{syncResult.synced}</strong> bugs importes depuis Azure DevOps.</span>
-          <button onClick={() => setSyncResult(null)} className="ml-auto text-blue-400 hover:text-blue-600 text-lg leading-none">x</button>
+          <span>
+            Synchronisation terminee - <strong>{syncResult.synced}</strong> bugs importes,{' '}
+            <strong>{syncResult.checkedBugs}</strong> analyses,{' '}
+            <strong className="text-red-600">{syncResult.newViolations}</strong> nouvelles anomalies,{' '}
+            <strong className="text-green-700">{syncResult.resolvedViolations}</strong> resolues.
+          </span>
+          <button onClick={clearSyncResult} className="ml-auto text-blue-400 hover:text-blue-600 text-lg leading-none">x</button>
         </div>
       )}
       {syncError && (
         <div className="mt-5 mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
-          <span>Erreur de synchronisation : {syncError}</span>
-          <button onClick={() => setSyncError(null)} className="text-red-400 hover:text-red-600">x</button>
+          <span>Erreur de synchronisation/evaluation : {syncError}</span>
+          <button onClick={clearSyncError} className="text-red-400 hover:text-red-600">x</button>
         </div>
       )}
       {/* Tab bar â€” sticky dans la zone scrollable */}
@@ -1745,6 +1879,12 @@ export default function Kpis() {
     </Layout>
   );
 }
+
+
+
+
+
+
 
 
 

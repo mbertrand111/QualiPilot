@@ -2,8 +2,6 @@
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Icons Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-
 function HomeIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -61,18 +59,14 @@ function ChevronLeftIcon({ className }: { className?: string }) {
   );
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Nav config Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-
 const NAV_ITEMS = [
-  { path: '/',           icon: HomeIcon,    label: 'Tableau de bord', exact: true },
-  { path: '/triage',     icon: TriageIcon,  label: 'Bugs',             exact: false },
-  { path: '/conformity', icon: AlertIcon,   label: 'Anomalies',        exact: false },
-  { path: '/kpis',       icon: ChartIcon,   label: 'KPIs',             exact: false },
-  { path: '/history',    icon: ClockIcon,   label: 'Historique',       exact: false },
-  { path: '/settings',   icon: CogIcon,     label: 'Parametres',       exact: false },
+  { path: '/', icon: HomeIcon, label: 'Tableau de bord', exact: true },
+  { path: '/triage', icon: TriageIcon, label: 'Bugs', exact: false },
+  { path: '/conformity', icon: AlertIcon, label: 'Anomalies', exact: false },
+  { path: '/kpis', icon: ChartIcon, label: 'KPIs', exact: false },
+  { path: '/history', icon: ClockIcon, label: 'Historique', exact: false },
+  { path: '/settings', icon: CogIcon, label: 'Paramètres', exact: false },
 ];
-
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Layout Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 interface LayoutProps {
   children: ReactNode;
@@ -122,19 +116,19 @@ export function Layout({ children, title, actions, contentClassName }: LayoutPro
   }, []);
 
   return (
-    <div className="flex h-screen bg-[#f7f8fc] overflow-hidden font-sans">
-
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Sidebar Ã¢â€â‚¬Ã¢â€â‚¬ */}
-      <aside className={[
-        'relative bg-[#0b1e45] flex flex-col shrink-0 shadow-2xl z-10 transition-all duration-200',
-        collapsed ? 'w-16' : 'w-60',
-      ].join(' ')}>
-
-        {/* Logo */}
-        <div className={[
-          'border-b border-white/[0.07] flex items-center',
-          collapsed ? 'px-3 py-4 justify-center' : 'px-5 py-4',
-        ].join(' ')}>
+    <div className="flex h-screen overflow-hidden bg-[#f7f8fc] font-sans">
+      <aside
+        className={[
+          'relative z-10 flex shrink-0 flex-col bg-[#0b1e45] shadow-2xl transition-all duration-200',
+          collapsed ? 'w-16' : 'w-60',
+        ].join(' ')}
+      >
+        <div
+          className={[
+            'flex items-center border-b border-white/[0.07]',
+            collapsed ? 'justify-center px-3 py-4' : 'px-5 py-4',
+          ].join(' ')}
+        >
           {collapsed ? (
             <img src="/favicon.png" alt="QualiPilot" className="h-8 w-8" />
           ) : (
@@ -142,19 +136,17 @@ export function Layout({ children, title, actions, contentClassName }: LayoutPro
           )}
         </div>
 
-        {/* Toggle Ã¢â‚¬â€ ÃƒÂ  cheval sur le bord droit */}
         <button
           onClick={() => setCollapsed(c => !c)}
-          title={collapsed ? 'Agrandir la navigation' : 'Reduire la navigation'}
-          className="absolute top-[30px] -right-3 z-20 flex items-center justify-center w-6 h-6 rounded-full bg-[#0b1e45]/80 backdrop-blur-sm border border-white/15 text-white/50 hover:text-white hover:border-white/30 transition-colors shadow-md"
+          title={collapsed ? 'Agrandir la navigation' : 'Réduire la navigation'}
+          className="absolute -right-3 top-[30px] z-20 flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-[#0b1e45]/80 text-white/50 shadow-md backdrop-blur-sm transition-colors hover:border-white/30 hover:text-white"
         >
-          <ChevronLeftIcon className={`w-3 h-3 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`} />
+          <ChevronLeftIcon className={`h-3 w-3 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`} />
         </button>
 
-        {/* Nav */}
-        <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-4">
           {!collapsed && (
-            <div className="px-3 mb-3">
+            <div className="mb-3 px-3">
               <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30">Navigation</span>
             </div>
           )}
@@ -170,59 +162,50 @@ export function Layout({ children, title, actions, contentClassName }: LayoutPro
                 to={path}
                 title={collapsed ? label : undefined}
                 className={[
-                  'flex items-center rounded-xl font-medium group transition-colors',
+                  'group flex items-center rounded-xl font-medium transition-colors',
                   collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-3 py-2.5 text-[13px]',
                   active
                     ? 'bg-[#1E63B6] text-white shadow-md shadow-[#0F3E8A]/60'
                     : 'text-white/50 hover:bg-white/[0.07] hover:text-white',
                 ].join(' ')}
               >
-                <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-[#66D2DB]' : 'text-white/40 group-hover:text-white/80'}`} />
+                <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-[#66D2DB]' : 'text-white/40 group-hover:text-white/80'}`} />
                 {!collapsed && <span className="truncate">{label}</span>}
-                {!collapsed && active && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#66D2DB] shrink-0" />
-                )}
+                {!collapsed && active && <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[#66D2DB]" />}
               </Link>
             );
           })}
         </nav>
 
-        {/* Sync status footer */}
-        <div className={['border-t border-white/[0.07]', collapsed ? 'px-0 py-4 flex justify-center' : 'px-5 py-4'].join(' ')}>
+        <div className={['border-t border-white/[0.07]', collapsed ? 'flex justify-center px-0 py-4' : 'px-5 py-4'].join(' ')}>
           {collapsed ? (
-            <span className="relative flex h-2 w-2 shrink-0" title={`Derniere sync : ${formatSyncDate(lastSyncAt)}`}>
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#66D2DB] opacity-60"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#66D2DB]"></span>
+            <span className="relative flex h-2 w-2 shrink-0" title={`Dernière sync : ${formatSyncDate(lastSyncAt)}`}>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#66D2DB] opacity-60"></span>
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#66D2DB]"></span>
             </span>
           ) : (
             <div className="flex items-center gap-2.5">
               <span className="relative flex h-2 w-2 shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#66D2DB] opacity-60"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#66D2DB]"></span>
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#66D2DB] opacity-60"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#66D2DB]"></span>
               </span>
               <div className="min-w-0">
-                <div className="text-[11px] text-white/40 font-medium">Derniere sync</div>
-                <div className="text-[11px] text-white/50 font-mono truncate">{formatSyncDate(lastSyncAt)}</div>
+                <div className="text-[11px] font-medium text-white/40">Dernière sync</div>
+                <div className="truncate font-mono text-[11px] text-white/50">{formatSyncDate(lastSyncAt)}</div>
               </div>
             </div>
           )}
         </div>
       </aside>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Main area Ã¢â€â‚¬Ã¢â€â‚¬ */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-
-        {/* Page header */}
+      <div className="flex flex-1 flex-col overflow-hidden">
         {(title || actions) && (
-          <header className="bg-white/80 backdrop-blur-sm border-b border-gray-100/80 px-8 py-4 min-h-[72px] flex items-center justify-between shrink-0">
-            <h1 className="text-[21px] font-bold text-[#0F3E8A] tracking-tight">{title}</h1>
-            {actions && (
-              <div className="flex items-center gap-3">{actions}</div>
-            )}
+          <header className="flex min-h-[72px] shrink-0 items-center justify-between border-b border-gray-100/80 bg-white/80 px-8 py-4 backdrop-blur-sm">
+            <h1 className="text-[21px] font-bold tracking-tight text-[#0F3E8A]">{title}</h1>
+            {actions && <div className="flex items-center gap-3">{actions}</div>}
           </header>
         )}
 
-        {/* Content */}
         <main className={['flex-1 overflow-auto bg-[#f7f8fc]', contentClassName ?? 'p-7'].join(' ')}>
           {children}
         </main>
@@ -230,4 +213,3 @@ export function Layout({ children, title, actions, contentClassName }: LayoutPro
     </div>
   );
 }
-

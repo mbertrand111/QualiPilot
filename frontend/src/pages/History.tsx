@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Layout } from '../components/Layout';
+import { SyncButton } from '../components/SyncButton';
+import { useSyncAndEvaluate } from '../hooks/useSyncAndEvaluate';
 
 const ADO_BASE = 'https://dev.azure.com/Isagri-Prod-Progiciels/Isagri_Dev_GC_GestionCommerciale/_workitems/edit/';
 
@@ -18,11 +20,21 @@ const SNAPSHOTS = [
 interface AutoFixRow {
   id: number;
   work_item_id: number;
+  rule_code: string;
+  rule_description: string;
   field: string;
   old_value: string | null;
   new_value: string | null;
   trigger_source: string;
   performed_at: string;
+}
+
+interface AutoFixLastRun {
+  id: number;
+  trigger_source: 'sync' | 'scheduler' | string;
+  run_at: string;
+  skipped: boolean;
+  total_updated: number;
 }
 
 function fmtDateTime(iso: string): string {
@@ -56,10 +68,10 @@ export default function History() {
   const trend = SNAPSHOTS[0].totalBugs - SNAPSHOTS[SNAPSHOTS.length - 1].totalBugs;
 
   const [autoRows, setAutoRows] = useState<AutoFixRow[]>([]);
-  const [pendingCount, setPendingCount] = useState(0);
   const [loadingAuto, setLoadingAuto] = useState(false);
   const [autoError, setAutoError] = useState<string | null>(null);
   const [acking, setAcking] = useState(false);
+  const [lastRun, setLastRun] = useState<AutoFixLastRun | null>(null);
 
   const hasAutoRows = autoRows.length > 0;
 
@@ -71,7 +83,7 @@ export default function History() {
       if (!res.ok) throw new Error(`Erreur ${res.status}`);
       const data = await res.json();
       setAutoRows(Array.isArray(data.rows) ? data.rows : []);
-      setPendingCount(typeof data.pending === 'number' ? data.pending : 0);
+      setLastRun(data.lastRun && typeof data.lastRun === 'object' ? data.lastRun as AutoFixLastRun : null);
     } catch (e) {
       setAutoError(e instanceof Error ? e.message : 'Erreur inconnue');
     } finally {
@@ -82,6 +94,17 @@ export default function History() {
   useEffect(() => {
     loadAutoFixes();
   }, [loadAutoFixes]);
+
+  const {
+    step: syncStep,
+    result: syncResult,
+    error: syncError,
+    run: runSync,
+    clearResult: clearSyncResult,
+    clearError: clearSyncError,
+  } = useSyncAndEvaluate(async () => {
+    await loadAutoFixes();
+  });
 
   async function acknowledgeAll() {
     setAcking(true);
@@ -101,12 +124,30 @@ export default function History() {
   }
 
   const autoSectionTitle = useMemo(() => {
-    if (pendingCount <= 0) return 'Corrections auto en attente';
-    return `Corrections auto en attente (${pendingCount})`;
-  }, [pendingCount]);
+    const count = typeof lastRun?.total_updated === 'number' ? lastRun.total_updated : autoRows.length;
+    return `Corrections auto effectu\u00E9es depuis dernier check (${count})`;
+  }, [lastRun, autoRows.length]);
 
   return (
-    <Layout title="Historique des snapshots">
+    <Layout title="Historique des snapshots" actions={<SyncButton step={syncStep} onClick={runSync} />}>
+      {syncResult && (
+        <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-5 py-3 text-sm text-blue-700">
+          <span>
+            {'Synchronisation termin\u00E9e \u2014 '}
+            <strong>{syncResult.synced}</strong> {'bugs import\u00E9s, '}
+            <strong>{syncResult.checkedBugs}</strong> {'analys\u00E9s, '}
+            <strong className="text-red-600">{syncResult.newViolations}</strong> nouvelles anomalies,{' '}
+            <strong className="text-green-700">{syncResult.resolvedViolations}</strong> {'r\u00E9solues.'}
+          </span>
+          <button onClick={clearSyncResult} className="ml-auto text-blue-400 hover:text-blue-600 text-lg leading-none">x</button>
+        </div>
+      )}
+      {syncError && (
+        <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
+          <span>{'Erreur de synchronisation/\u00E9valuation : '}{syncError}</span>
+          <button onClick={clearSyncError} className="text-red-400 hover:text-red-600">x</button>
+        </div>
+      )}
       <div className="fade-up flex items-start gap-4 mb-6">
         <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
@@ -137,7 +178,7 @@ export default function History() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50/60 border-b border-gray-100">
-              {['Date', 'Sprint', 'Bugs ouverts', 'Crees', 'Fermes', 'Anomalies', 'Conformite'].map((h, i) => (
+              {['Date', 'Sprint', 'Bugs ouverts', 'Créés', 'Fermés', 'Anomalies', 'Conformité'].map((h, i) => (
                 <th
                   key={h}
                   className={`px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 ${
@@ -193,7 +234,9 @@ export default function History() {
           <div>
             <div className="text-sm font-semibold text-[#0e1a38]">{autoSectionTitle}</div>
             <div className="text-xs text-gray-400 mt-0.5">
-              Trace des modifications appliquees automatiquement (sync + scheduler 15 min)
+              {lastRun
+                ? `Dernier check: ${fmtDateTime(lastRun.run_at)} (${lastRun.trigger_source === 'scheduler' ? 'scheduler 15 min' : 'sync'})`
+                : 'Trace des modifications appliquées automatiquement (sync + scheduler 15 min)'}
             </div>
           </div>
           <button
@@ -224,7 +267,7 @@ export default function History() {
           <table className="w-full min-w-[920px]">
             <thead>
               <tr className="bg-gray-50/60 border-b border-gray-100">
-                {['Date', 'Bug', 'Champ', 'Ancienne valeur', 'Nouvelle valeur', 'Source'].map((h) => (
+                {['Date', 'Bug', 'Règle', 'Champ', 'Ancienne valeur', 'Nouvelle valeur', 'Source'].map((h) => (
                   <th key={h} className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 text-left">
                     {h}
                   </th>
@@ -234,13 +277,13 @@ export default function History() {
             <tbody className="divide-y divide-gray-50">
               {loadingAuto && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">Chargement...</td>
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">Chargement...</td>
                 </tr>
               )}
               {!loadingAuto && autoRows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
-                    Aucune correction auto en attente.
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
+                    Aucune correction auto sur le dernier check.
                   </td>
                 </tr>
               )}
@@ -256,6 +299,10 @@ export default function History() {
                     >
                       #{row.work_item_id}
                     </a>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-700">
+                    <div className="font-mono font-semibold">{row.rule_code}</div>
+                    <div className="text-gray-500">{row.rule_description}</div>
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-700 font-mono">{row.field}</td>
                   <td className="px-4 py-3 text-xs text-red-500 font-mono">{row.old_value ?? '(vide)'}</td>
@@ -273,9 +320,10 @@ export default function History() {
       </div>
 
       <p className="fade-up mt-4 text-[11px] text-gray-400 text-center">
-        Snapshots generes automatiquement chaque semaine par le scheduler - aucune action manuelle requise.
+        Snapshots générés automatiquement chaque semaine par le scheduler - aucune action manuelle requise.
       </p>
     </Layout>
   );
 }
+
 

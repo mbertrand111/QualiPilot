@@ -9,13 +9,75 @@ router.get('/stats/auto-fixes', (req, res) => {
   const db = getDb();
   const onlyPending = req.query.only_pending !== '0';
 
+  const lastRun = db.prepare(`
+    SELECT
+      id,
+      trigger_source,
+      run_at,
+      skipped,
+      priority_attempted,
+      priority_updated,
+      priority_failed,
+      integration_attempted,
+      integration_updated,
+      integration_failed,
+      total_updated
+    FROM auto_remediation_runs
+    ORDER BY datetime(run_at) DESC, id DESC
+    LIMIT 1
+  `).get() as {
+    id: number;
+    trigger_source: string;
+    run_at: string;
+    skipped: number;
+    priority_attempted: number;
+    priority_updated: number;
+    priority_failed: number;
+    integration_attempted: number;
+    integration_updated: number;
+    integration_failed: number;
+    total_updated: number;
+  } | undefined;
+
+  const effectiveRuleCodeExpr = `
+    CASE
+      WHEN a.rule_code IS NOT NULL AND TRIM(a.rule_code) <> '' THEN a.rule_code
+      WHEN a.field = 'priority' THEN 'PRIORITY_CHECK'
+      WHEN a.field = 'integration_build' THEN 'INTEGRATION_BUILD_NOT_EMPTIED'
+      ELSE 'UNKNOWN'
+    END
+  `;
+
+  const baseRowsQuery = `
+    SELECT
+      a.id,
+      a.work_item_id,
+      a.field,
+      a.old_value,
+      a.new_value,
+      a.trigger_source,
+      a.performed_at,
+      a.acknowledged_at,
+      ${effectiveRuleCodeExpr} AS rule_code,
+      COALESCE(r.description, ${effectiveRuleCodeExpr}) AS rule_description
+    FROM auto_fix_audit a
+    LEFT JOIN conformity_rules r ON r.code = ${effectiveRuleCodeExpr}
+  `;
+
+  const whereParts: string[] = [];
+  const params: unknown[] = [];
+  if (onlyPending) whereParts.push('a.acknowledged_at IS NULL');
+  if (lastRun) {
+    whereParts.push('a.run_id = ?');
+    params.push(lastRun.id);
+  }
+
   const rows = db.prepare(`
-    SELECT id, work_item_id, field, old_value, new_value, trigger_source, performed_at, acknowledged_at
-    FROM auto_fix_audit
-    ${onlyPending ? 'WHERE acknowledged_at IS NULL' : ''}
-    ORDER BY performed_at DESC
+    ${baseRowsQuery}
+    ${whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : ''}
+    ORDER BY datetime(a.performed_at) DESC, a.id DESC
     LIMIT 300
-  `).all() as {
+  `).all(...params) as {
     id: number;
     work_item_id: number;
     field: string;
@@ -24,13 +86,46 @@ router.get('/stats/auto-fixes', (req, res) => {
     trigger_source: string;
     performed_at: string;
     acknowledged_at: string | null;
+    rule_code: string;
+    rule_description: string;
   }[];
 
-  const pending = (db.prepare(`
-    SELECT COUNT(*) AS n FROM auto_fix_audit WHERE acknowledged_at IS NULL
-  `).get() as { n: number }).n;
+  const pending = lastRun
+    ? (db.prepare(`
+        SELECT COUNT(*) AS n
+        FROM auto_fix_audit
+        WHERE acknowledged_at IS NULL
+          AND run_id = ?
+      `).get(lastRun.id) as { n: number }).n
+    : (db.prepare(`
+        SELECT COUNT(*) AS n
+        FROM auto_fix_audit
+        WHERE acknowledged_at IS NULL
+      `).get() as { n: number }).n;
 
-  res.json({ pending, rows });
+  res.json({
+    pending,
+    rows,
+    lastRun: lastRun
+      ? {
+          id: lastRun.id,
+          trigger_source: lastRun.trigger_source,
+          run_at: lastRun.run_at,
+          skipped: lastRun.skipped === 1,
+          priority: {
+            attempted: lastRun.priority_attempted,
+            updated: lastRun.priority_updated,
+            failed: lastRun.priority_failed,
+          },
+          integration_build: {
+            attempted: lastRun.integration_attempted,
+            updated: lastRun.integration_updated,
+            failed: lastRun.integration_failed,
+          },
+          total_updated: lastRun.total_updated,
+        }
+      : null,
+  });
 });
 
 // POST /api/stats/auto-fixes/ack
