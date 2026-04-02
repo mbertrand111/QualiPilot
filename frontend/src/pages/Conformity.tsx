@@ -1064,7 +1064,7 @@ export default function Conformity() {
               value={bulkValue}
               onChange={e => setBulkValue(e.target.value)}
               placeholder="Nouvelle valeur..."
-              className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 flex-1 min-w-0"
+              className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 flex-1 min-w-[180px]"
             />
           )}
 
@@ -1080,7 +1080,7 @@ export default function Conformity() {
           {/* Désélectionner */}
           <button
             onClick={() => setSelectedIds(new Set())}
-            className="shrink-0 text-white/50 hover:text-white transition-colors ml-auto"
+            className="shrink-0 text-white/50 hover:text-white transition-colors"
             title="Désélectionner tout"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>

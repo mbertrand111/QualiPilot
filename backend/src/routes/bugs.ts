@@ -9,6 +9,11 @@ const SORTABLE_COLUMNS = new Set([
   'found_in', 'integration_build', 'version_souhaitee', 'resolved_reason',
   'assigned_to', 'created_date', 'resolved_date', 'changed_date',
 ]);
+const FILIERE_SQL = `CASE
+  WHEN UPPER(COALESCE(title, '')) LIKE '%[CO]%' THEN 'CO'
+  WHEN UPPER(COALESCE(title, '')) LIKE '%[IW]%' THEN 'IW'
+  ELSE 'GC'
+END`;
 
 // GET /api/bugs
 router.get('/bugs', (req, res) => {
@@ -18,6 +23,12 @@ router.get('/bugs', (req, res) => {
   const teams       = typeof req.query.team        === 'string' && req.query.team        ? req.query.team.split(',').filter(Boolean)        : [];
   const states      = typeof req.query.state       === 'string' && req.query.state       ? req.query.state.split(',').filter(Boolean)       : [];
   const sprints     = typeof req.query.sprint      === 'string' && req.query.sprint      ? req.query.sprint.split(',').filter(Boolean)      : [];
+  const filieres    = typeof req.query.filiere     === 'string' && req.query.filiere
+    ? req.query.filiere
+        .split(',')
+        .map(v => v.trim().toUpperCase())
+        .filter(v => v === 'GC' || v === 'CO' || v === 'IW')
+    : [];
   const sprint_done = typeof req.query.sprint_done === 'string' ? req.query.sprint_done : null;
 
   // Filtres "contient"
@@ -46,6 +57,13 @@ router.get('/bugs', (req, res) => {
   else if (states.length > 1){ conditions.push(`state IN (${states.map(() => '?').join(',')})`); params.push(...states); }
   if (sprints.length === 1) { conditions.push('sprint = ?');                                 params.push(sprints[0]); }
   else if (sprints.length > 1){ conditions.push(`sprint IN (${sprints.map(() => '?').join(',')})`); params.push(...sprints); }
+  if (filieres.length === 1) {
+    conditions.push(`${FILIERE_SQL} = ?`);
+    params.push(filieres[0]);
+  } else if (filieres.length > 1) {
+    conditions.push(`${FILIERE_SQL} IN (${filieres.map(() => '?').join(',')})`);
+    params.push(...filieres);
+  }
   if (sprint_done) { conditions.push('sprint_done = ?');                    params.push(sprint_done); }
   if (id_contains)       { conditions.push("CAST(id AS TEXT) LIKE ?");      params.push(`%${id_contains}%`); }
   if (title_contains)    { conditions.push('title LIKE ?');                 params.push(`%${title_contains}%`); }

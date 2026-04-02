@@ -85,6 +85,34 @@ CREATE TABLE IF NOT EXISTS kpi_snapshots (
   created_at            TEXT DEFAULT (datetime('now'))
 );
 
+-- Historisation KPI "Backlogs équipes" + "Bugs à corriger LIVE"
+-- Une ligne par sprint (SP1..SP4) capturée le vendredi.
+CREATE TABLE IF NOT EXISTS kpi_team_backlog_snapshots (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  snapshot_date    TEXT NOT NULL, -- date locale Europe/Paris, format YYYY-MM-DD
+  sprint_name      TEXT NOT NULL,
+  pi_name          TEXT,
+  live_area_bugs   INTEGER NOT NULL DEFAULT 0,
+  source           TEXT NOT NULL,
+  created_at       TEXT DEFAULT (datetime('now')),
+  UNIQUE(sprint_name)
+);
+
+CREATE TABLE IF NOT EXISTS kpi_team_backlog_snapshot_rows (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  snapshot_id   INTEGER NOT NULL REFERENCES kpi_team_backlog_snapshots(id) ON DELETE CASCADE,
+  team          TEXT NOT NULL,
+  objective     INTEGER NOT NULL,
+  gc_bugs       INTEGER NOT NULL,
+  new_bugs      INTEGER NOT NULL,
+  active_bugs   INTEGER NOT NULL,
+  resolved_bugs INTEGER NOT NULL,
+  co_bugs       INTEGER NOT NULL,
+  iw_bugs       INTEGER NOT NULL,
+  created_at    TEXT DEFAULT (datetime('now')),
+  UNIQUE(snapshot_id, team)
+);
+
 -- Audit des écritures Azure DevOps
 CREATE TABLE IF NOT EXISTS ado_write_audit (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -130,6 +158,20 @@ CREATE TABLE IF NOT EXISTS kpi_release_version_filters (
   selected      INTEGER NOT NULL DEFAULT 1 CHECK(selected IN (0, 1)),
   discovered_at TEXT DEFAULT (datetime('now')),
   updated_at    TEXT DEFAULT (datetime('now'))
+);
+
+-- Calendrier PI/Sprint configurable (utilise pour les calculs KPI par PI)
+CREATE TABLE IF NOT EXISTS sprint_calendar (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  pi_label     TEXT NOT NULL, -- ex: "25-26 PI4"
+  sprint_label TEXT NOT NULL, -- ex: "SP1", "SP2", ..., "SP5"
+  start_date   TEXT NOT NULL, -- YYYY-MM-DD
+  end_date     TEXT NOT NULL, -- YYYY-MM-DD
+  active       INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1)),
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  created_at   TEXT DEFAULT (datetime('now')),
+  updated_at   TEXT DEFAULT (datetime('now')),
+  UNIQUE(pi_label, sprint_label)
 );
 
 -- Données initiales : 8 équipes

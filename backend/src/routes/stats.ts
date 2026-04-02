@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { getDb } from '../db';
+import { listKpiTeamBacklogHistory } from '../services/kpiHistory';
 
 const router = Router();
 
 // GET /api/stats/auto-fixes
-// Retourne les dernières corrections automatiques (par défaut: non validées).
+// Retourne les corrections automatiques (par défaut: non validées),
+// conservées jusqu'à validation via /ack.
 router.get('/stats/auto-fixes', (req, res) => {
   const db = getDb();
   const onlyPending = req.query.only_pending !== '0';
@@ -67,10 +69,6 @@ router.get('/stats/auto-fixes', (req, res) => {
   const whereParts: string[] = [];
   const params: unknown[] = [];
   if (onlyPending) whereParts.push('a.acknowledged_at IS NULL');
-  if (lastRun) {
-    whereParts.push('a.run_id = ?');
-    params.push(lastRun.id);
-  }
 
   const rows = db.prepare(`
     ${baseRowsQuery}
@@ -90,18 +88,11 @@ router.get('/stats/auto-fixes', (req, res) => {
     rule_description: string;
   }[];
 
-  const pending = lastRun
-    ? (db.prepare(`
-        SELECT COUNT(*) AS n
-        FROM auto_fix_audit
-        WHERE acknowledged_at IS NULL
-          AND run_id = ?
-      `).get(lastRun.id) as { n: number }).n
-    : (db.prepare(`
-        SELECT COUNT(*) AS n
-        FROM auto_fix_audit
-        WHERE acknowledged_at IS NULL
-      `).get() as { n: number }).n;
+  const pending = (db.prepare(`
+    SELECT COUNT(*) AS n
+    FROM auto_fix_audit
+    WHERE acknowledged_at IS NULL
+  `).get() as { n: number }).n;
 
   res.json({
     pending,
@@ -159,6 +150,18 @@ router.post('/stats/auto-fixes/ack', (req, res) => {
   res.json({ acknowledged });
 });
 
+// GET /api/stats/kpi-history
+// Historique des snapshots "Backlogs équipes" + compteur "Bugs à corriger LIVE".
+router.get('/stats/kpi-history', (req, res) => {
+  try {
+    const limitRaw = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : undefined;
+    const history = listKpiTeamBacklogHistory(limitRaw);
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unexpected error' });
+  }
+});
+
 // GET /api/stats/home
 // Returns open bug counts by type + resolved bugs + total active violations
 router.get('/stats/home', (_req, res) => {
@@ -205,6 +208,11 @@ router.get('/stats/home', (_req, res) => {
 // Note: team filter is intentionally excluded — zones ARE the team grouping here
 router.get('/stats/triage', (req, res) => {
   const db = getDb();
+  const FILIERE_SQL = `CASE
+    WHEN UPPER(COALESCE(title, '')) LIKE '%[CO]%' THEN 'CO'
+    WHEN UPPER(COALESCE(title, '')) LIKE '%[IW]%' THEN 'IW'
+    ELSE 'GC'
+  END`;
 
   const conditions: string[] = [];
   const params: unknown[]    = [];
@@ -220,6 +228,16 @@ router.get('/stats/triage', (req, res) => {
     ? req.query.sprint.split(',').filter(Boolean) : [];
   if (sprints.length === 1)   { conditions.push('sprint = ?');                                       params.push(sprints[0]); }
   else if (sprints.length > 1){ conditions.push(`sprint IN (${sprints.map(() => '?').join(',')})`);  params.push(...sprints); }
+
+  // filiere
+  const filieres = typeof req.query.filiere === 'string' && req.query.filiere
+    ? req.query.filiere
+        .split(',')
+        .map((v) => v.trim().toUpperCase())
+        .filter((v) => v === 'GC' || v === 'CO' || v === 'IW')
+    : [];
+  if (filieres.length === 1)   { conditions.push(`${FILIERE_SQL} = ?`);                                      params.push(filieres[0]); }
+  else if (filieres.length > 1){ conditions.push(`${FILIERE_SQL} IN (${filieres.map(() => '?').join(',')})`); params.push(...filieres); }
 
   // bug_type via SQLite custom function
   const validBugTypes = new Set(['live', 'onpremise', 'hors_version', 'uncategorized']);

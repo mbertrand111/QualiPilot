@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { runSync } from '../services/sync';
 import { runAutoRemediation } from '../services/autoRemediation';
 import { AdoError } from '../services/azureDevOps';
+import { captureKpiTeamBacklogSnapshotIfDue } from '../services/kpiHistory';
 import logger from '../logger';
 
 const router = Router();
@@ -10,13 +11,20 @@ router.post('/sync', async (_req, res) => {
   try {
     const syncResult = await runSync();
     let autoRemediation: unknown = null;
+    let kpiHistoryCapture: unknown = null;
     try {
       autoRemediation = await runAutoRemediation('sync');
     } catch (err) {
       logger.error({ err }, 'Auto-remediation failed after sync');
       autoRemediation = { error: err instanceof Error ? err.message : 'Erreur auto-remediation' };
     }
-    res.json({ ...syncResult, autoRemediation });
+    try {
+      kpiHistoryCapture = captureKpiTeamBacklogSnapshotIfDue('sync');
+    } catch (err) {
+      logger.error({ err }, 'KPI history capture failed after sync');
+      kpiHistoryCapture = { error: err instanceof Error ? err.message : 'Erreur capture KPI' };
+    }
+    res.json({ ...syncResult, autoRemediation, kpiHistoryCapture });
   } catch (err) {
     if (err instanceof AdoError) {
       logger.error({ err }, 'ADO sync failed');

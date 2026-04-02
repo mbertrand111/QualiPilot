@@ -101,9 +101,9 @@ interface PersistedReleaseFilters {
   products: ReleaseProduct[];
   versions: string[];
   patches: string[];
-  states: string[];
-  team: string | null;
 }
+
+const DEFAULT_RELEASE_STATES = ['New', 'Active', 'Resolved', 'Closed'] as const;
 
 function majorVersionMatchesProduct(majorVersion: string, product: ReleaseProduct): boolean {
   if (majorVersion === 'vide' || majorVersion === 'Non concerne') return true;
@@ -119,23 +119,16 @@ const RELEASE_FILTERS_STORAGE_KEY = 'kpis.suiviRelease.filters.v1';
 function loadPersistedReleaseFilters(): PersistedReleaseFilters {
   try {
     const raw = localStorage.getItem(RELEASE_FILTERS_STORAGE_KEY);
-    if (!raw) return { products: [], versions: [], patches: [], states: [], team: null };
-    const parsed = JSON.parse(raw) as Partial<PersistedReleaseFilters> & { state?: unknown };
-
-    const statesFromArray = Array.isArray(parsed.states)
-      ? parsed.states.filter((s): s is string => typeof s === 'string')
-      : [];
-    const legacyState = typeof parsed.state === 'string' ? [parsed.state] : [];
+    if (!raw) return { products: [], versions: [], patches: [] };
+    const parsed = JSON.parse(raw) as Partial<PersistedReleaseFilters>;
 
     return {
       products: Array.isArray(parsed.products) ? parsed.products.filter((p): p is ReleaseProduct => typeof p === 'string') : [],
       versions: Array.isArray(parsed.versions) ? parsed.versions.filter((v): v is string => typeof v === 'string') : [],
       patches: Array.isArray(parsed.patches) ? parsed.patches.filter((v): v is string => typeof v === 'string') : [],
-      states: statesFromArray.length > 0 ? statesFromArray : legacyState,
-      team: typeof parsed.team === 'string' ? parsed.team : null,
     };
   } catch {
-    return { products: [], versions: [], patches: [], states: [], team: null };
+    return { products: [], versions: [], patches: [] };
   }
 }
 
@@ -481,10 +474,8 @@ function ClickablePie({
   compactLegendCount?: number;
 }) {
   const [legendExpanded, setLegendExpanded] = useState(false);
-  const pieData = useMemo(
-    () => data
-      .map((d) => ({ ...d, value: Number(d.value) || 0 }))
-      .filter((d) => d.value > 0),
+  const legendData = useMemo(
+    () => data.map((d) => ({ ...d, value: Number(d.value) || 0 })),
     [data],
   );
   const selectedSet = useMemo(() => {
@@ -492,120 +483,134 @@ function ClickablePie({
     if (typeof selected === 'string' && selected.length > 0) return new Set([selected]);
     return new Set<string>();
   }, [selected]);
+  const hasSelection = selectedSet.size > 0;
+  const pieData = useMemo(
+    () => legendData.filter((d) => (!hasSelection || selectedSet.has(d.name)) && d.value > 0),
+    [legendData, hasSelection, selectedSet],
+  );
   const firstSelected = useMemo(
-    () => pieData.find((d) => selectedSet.has(d.name))?.name ?? null,
-    [pieData, selectedSet],
+    () => legendData.find((d) => selectedSet.has(d.name))?.name ?? null,
+    [legendData, selectedSet],
   );
   const total = pieData.reduce((s, d) => s + d.value, 0);
-  const maxLegendItems = compactLegendCount && compactLegendCount > 0 ? compactLegendCount : pieData.length;
-  const shouldCollapseLegend = pieData.length > maxLegendItems;
+  const legendTotal = legendData.reduce((s, d) => s + d.value, 0);
+  const maxLegendItems = compactLegendCount && compactLegendCount > 0 ? compactLegendCount : legendData.length;
+  const shouldCollapseLegend = legendData.length > maxLegendItems;
 
   useEffect(() => {
     setLegendExpanded(false);
-  }, [pieData.length, title]);
+  }, [legendData.length, title]);
 
   const visibleLegendData = useMemo(() => {
-    if (!shouldCollapseLegend || legendExpanded) return pieData;
-    const head = pieData.slice(0, maxLegendItems);
+    if (!shouldCollapseLegend || legendExpanded) return legendData;
+    const head = legendData.slice(0, maxLegendItems);
     if (!firstSelected || head.some((d) => d.name === firstSelected)) return head;
-    const selectedEntry = pieData.find((d) => d.name === firstSelected);
+    const selectedEntry = legendData.find((d) => d.name === firstSelected);
     if (!selectedEntry) return head;
     return [
       selectedEntry,
-      ...pieData.filter((d) => d.name !== firstSelected).slice(0, Math.max(0, maxLegendItems - 1)),
+      ...legendData.filter((d) => d.name !== firstSelected).slice(0, Math.max(0, maxLegendItems - 1)),
     ];
-  }, [shouldCollapseLegend, legendExpanded, pieData, maxLegendItems, firstSelected]);
+  }, [shouldCollapseLegend, legendExpanded, legendData, maxLegendItems, firstSelected]);
 
   return (
     <div className="flex-1 bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">{title}</div>
-      {pieData.length === 0 ? (
-        <div className="h-[170px] flex items-center justify-center text-xs text-gray-400">
-          Aucune donnée pour ce filtre
-        </div>
-      ) : (
-        <div className="mt-2 flex flex-col gap-3 lg:flex-row lg:items-start">
-          <div className="relative lg:w-[46%] lg:min-w-[220px]">
-            <ResponsiveContainer width="100%" height={188}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={44}
-                  outerRadius={76}
+      <div className="mt-2 flex flex-col gap-3 lg:flex-row lg:items-start">
+        <div className="relative lg:w-[46%] lg:min-w-[220px]">
+          {pieData.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={188}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={44}
+                    outerRadius={76}
                   dataKey="value"
-                  isAnimationActive={false}
+                  isAnimationActive
+                  animationDuration={260}
+                  animationEasing="ease-out"
                   startAngle={90}
                   endAngle={-270}
                   paddingAngle={2}
-                  onClick={(entry) => { if (entry?.name) onSelect(entry.name as string); }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {pieData.map((entry, i) => (
-                    <Cell
-                      key={i}
-                      fill={entry.color}
-                      opacity={selectedSet.size === 0 || selectedSet.has(entry.name) ? 1 : 0.45}
-                      stroke={selectedSet.has(entry.name) ? '#0e1a38' : '#ffffff'}
-                      strokeWidth={selectedSet.has(entry.name) ? 2 : 1}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={ttStyle()} formatter={(v) => [String(v) + ' bugs']} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="text-2xl font-mono font-bold text-[#0e1a38]">{total}</span>
+                    onClick={(entry) => { if (entry?.name) onSelect(entry.name as string); }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {pieData.map((entry, i) => (
+                      <Cell
+                        key={i}
+                        fill={entry.color}
+                        stroke="#ffffff"
+                        strokeWidth={1}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={ttStyle()} formatter={(v) => [String(v) + ' bugs']} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className="text-2xl font-mono font-bold text-[#0e1a38]">{total}</span>
+              </div>
+            </>
+          ) : (
+            <div className="h-[188px] flex items-center justify-center text-xs text-gray-400 border border-dashed border-gray-200 rounded-lg">
+              Aucune donnée active
             </div>
-          </div>
+          )}
+        </div>
 
-          <div className="flex-1 min-w-0">
-            <div className="space-y-1">
-              {visibleLegendData.map(d => (
+        <div className="flex-1 min-w-0">
+          <div className="space-y-1">
+            {visibleLegendData.map(d => {
+              const disabled = hasSelection && !selectedSet.has(d.name);
+              return (
                 <button
                   key={d.name}
                   onClick={() => onSelect(d.name)}
                   className={[
                     'w-full flex items-center justify-between text-[11px] px-1.5 py-0.5 rounded transition-colors',
-                    selectedSet.has(d.name) ? 'bg-gray-100' : 'hover:bg-gray-50',
+                    disabled ? 'opacity-60 hover:bg-gray-50' : 'hover:bg-gray-50',
                   ].join(' ')}
                 >
                   <span className="flex items-center gap-1.5 min-w-0">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-                    <span className="text-gray-600 truncate">{d.name}</span>
+                    <span className={['truncate', disabled ? 'text-gray-400 line-through' : 'text-gray-600'].join(' ')}>
+                      {d.name}
+                    </span>
                   </span>
-                  <span className="font-mono text-gray-600 shrink-0">
-                    {d.value} <span className="text-gray-400">({total > 0 ? Math.round((d.value / total) * 100) : 0}%)</span>
+                  <span className={['font-mono shrink-0', disabled ? 'text-gray-400 line-through' : 'text-gray-600'].join(' ')}>
+                    {d.value} <span className="text-gray-400">({legendTotal > 0 ? Math.round((d.value / legendTotal) * 100) : 0}%)</span>
                   </span>
                 </button>
-              ))}
-            </div>
-
-            {shouldCollapseLegend && (
-              <button
-                type="button"
-                onClick={() => setLegendExpanded((prev) => !prev)}
-                className="w-full text-[11px] text-gray-500 hover:text-gray-700 text-center pt-1"
-              >
-                {legendExpanded ? 'Voir moins' : `Voir plus (${pieData.length - visibleLegendData.length})`}
-              </button>
-            )}
-
-            {selectedSet.size > 0 && (
-              <button
-                onClick={() => {
-                  if (onClear) onClear();
-                  else if (firstSelected) onSelect(firstSelected);
-                }}
-                className="mt-2 w-full text-[11px] text-blue-500 hover:text-blue-700 text-center"
-              >
-                Réinitialiser le filtre
-              </button>
-            )}
+              );
+            })}
           </div>
+
+          {shouldCollapseLegend && (
+            <button
+              type="button"
+              onClick={() => setLegendExpanded((prev) => !prev)}
+              className="w-full text-[11px] text-gray-500 hover:text-gray-700 text-center pt-1"
+            >
+              {legendExpanded ? 'Voir moins' : `Voir plus (${legendData.length - visibleLegendData.length})`}
+            </button>
+          )}
+
+          {selectedSet.size > 0 && (
+            <button
+              onClick={() => {
+                if (onClear) onClear();
+                else if (firstSelected) onSelect(firstSelected);
+              }}
+              className="mt-2 w-full text-[11px] text-blue-500 hover:text-blue-700 text-center"
+            >
+              Réinitialiser le filtre
+            </button>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -625,8 +630,8 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
   const [selectedProducts, setSelectedProducts] = useState<ReleaseProduct[]>(persisted.products);
   const [selectedVersions, setSelectedVersions] = useState<string[]>(persisted.versions);
   const [selectedPatches, setSelectedPatches] = useState<string[]>(persisted.patches);
-  const [selectedStates, setSelectedStates] = useState<string[]>(persisted.states);
-  const [filterTeam, setFilterTeam] = useState<string | null>(persisted.team);
+  const [selectedStates, setSelectedStates] = useState<string[]>([]);
+  const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -737,11 +742,6 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
     ));
   }, [allBugs, selectedProducts, selectedPatches, effectiveVersionSet]);
 
-  const filteredBugs = useMemo(
-    () => releaseFilteredBugs.filter((b) => (selectedStates.length === 0 || selectedStates.includes(b.state)) && (!filterTeam || b.team === filterTeam)),
-    [releaseFilteredBugs, selectedStates, filterTeam],
-  );
-
   const statePalette: Record<string, string> = {
     New: '#1D4ED8',
     Active: '#D97706',
@@ -754,43 +754,59 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
     'Non affecte': '#9CA3AF',
   };
 
+  const stateLegendOptions = useMemo(() => {
+    const stateSet = new Set(releaseFilteredBugs.map((b) => b.state));
+    const ordered: string[] = [...DEFAULT_RELEASE_STATES];
+    const extras = [...stateSet].filter((name) => !ordered.includes(name)).sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+    return [...ordered, ...extras];
+  }, [releaseFilteredBugs]);
+
+  const teamLegendOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const bug of releaseFilteredBugs) counts.set(bug.team, (counts.get(bug.team) ?? 0) + 1);
+    return [...counts.keys()].sort((a, b) => (
+      (counts.get(b) ?? 0) - (counts.get(a) ?? 0) || a.localeCompare(b, 'fr', { sensitivity: 'base' })
+    ));
+  }, [releaseFilteredBugs]);
+
+  useEffect(() => {
+    setSelectedStates((prev) => {
+      const next = prev.filter((stateName) => stateLegendOptions.includes(stateName));
+      return next.length > 0 ? next : [...stateLegendOptions];
+    });
+  }, [stateLegendOptions]);
+
+  useEffect(() => {
+    setSelectedTeams((prev) => {
+      const next = prev.filter((teamName) => teamLegendOptions.includes(teamName));
+      return next.length > 0 ? next : [...teamLegendOptions];
+    });
+  }, [teamLegendOptions]);
+
+  const stateSelectionSet = useMemo(() => new Set(selectedStates), [selectedStates]);
+  const teamSelectionSet = useMemo(() => new Set(selectedTeams), [selectedTeams]);
+
+  const filteredBugs = useMemo(
+    () => releaseFilteredBugs.filter((b) => stateSelectionSet.has(b.state) && teamSelectionSet.has(b.team)),
+    [releaseFilteredBugs, stateSelectionSet, teamSelectionSet],
+  );
+
   const statePieData = useMemo(() => {
-    const source = releaseFilteredBugs.filter((b) => !filterTeam || b.team === filterTeam);
+    const source = releaseFilteredBugs.filter((b) => teamSelectionSet.has(b.team));
     const counts = new Map<string, number>();
     for (const bug of source) counts.set(bug.state, (counts.get(bug.state) ?? 0) + 1);
 
-    const ordered = ['New', 'Active', 'Resolved', 'Closed'];
-    const extras = [...counts.keys()].filter((name) => !ordered.includes(name));
-    return [...ordered, ...extras]
-      .filter((name) => (counts.get(name) ?? 0) > 0)
+    return stateLegendOptions
       .map((name) => ({ name, value: counts.get(name) ?? 0, color: statePalette[name] ?? '#9CA3AF' }));
-  }, [releaseFilteredBugs, filterTeam]);
-
-  const stateFilterOptions = useMemo(
-    () => statePieData.map((d) => d.name),
-    [statePieData],
-  );
+  }, [releaseFilteredBugs, teamSelectionSet, stateLegendOptions]);
 
   const teamPieData = useMemo(() => {
-    const source = releaseFilteredBugs.filter((b) => selectedStates.length === 0 || selectedStates.includes(b.state));
+    const source = releaseFilteredBugs.filter((b) => stateSelectionSet.has(b.state));
     const counts = new Map<string, number>();
     for (const bug of source) counts.set(bug.team, (counts.get(bug.team) ?? 0) + 1);
 
-    const ordered = [...counts.keys()].sort((a, b) => (
-      (counts.get(b) ?? 0) - (counts.get(a) ?? 0) || a.localeCompare(b, 'fr', { sensitivity: 'base' })
-    ));
-    return ordered.map((name) => ({ name, value: counts.get(name) ?? 0, color: teamPalette[name] ?? '#9CA3AF' }));
-  }, [releaseFilteredBugs, selectedStates]);
-
-  useEffect(() => {
-    setSelectedStates((prev) => prev.filter((stateName) => statePieData.some((d) => d.name === stateName)));
-  }, [statePieData]);
-
-  useEffect(() => {
-    if (filterTeam && !teamPieData.some((d) => d.name === filterTeam)) {
-      setFilterTeam(null);
-    }
-  }, [filterTeam, teamPieData]);
+    return teamLegendOptions.map((name) => ({ name, value: counts.get(name) ?? 0, color: teamPalette[name] ?? '#9CA3AF' }));
+  }, [releaseFilteredBugs, stateSelectionSet, teamLegendOptions]);
 
   function toggleState(name: string) {
     setSelectedStates((prev) => (
@@ -799,21 +815,29 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
   }
 
   function toggleTeam(name: string) {
-    setFilterTeam((prev) => (prev === name ? null : name));
+    setSelectedTeams((prev) => (
+      prev.includes(name) ? prev.filter((teamName) => teamName !== name) : [...prev, name]
+    ));
   }
 
   function toggleBugFilter(bug: ReleaseBug) {
-    if (selectedStates.length === 1 && selectedStates[0] === bug.state && filterTeam === bug.team) {
-      setSelectedStates([]);
-      setFilterTeam(null);
+    if (selectedStates.length === 1 && selectedStates[0] === bug.state && selectedTeams.length === 1 && selectedTeams[0] === bug.team) {
+      setSelectedStates([...DEFAULT_RELEASE_STATES]);
+      setSelectedTeams([...teamLegendOptions]);
       return;
     }
     setSelectedStates([bug.state]);
-    setFilterTeam(bug.team);
+    setSelectedTeams([bug.team]);
   }
 
   const hasReleaseFilter = selectedProducts.length > 0 || selectedVersions.length > 0 || selectedPatches.length > 0;
-  const hasFilter = hasReleaseFilter || selectedStates.length > 0 || filterTeam !== null;
+  const stateFilterIsDefault =
+    selectedStates.length === stateLegendOptions.length
+    && stateLegendOptions.every((stateName) => selectedStates.includes(stateName));
+  const teamFilterIsDefault =
+    selectedTeams.length === teamLegendOptions.length
+    && teamLegendOptions.every((teamName) => selectedTeams.includes(teamName));
+  const hasFilter = hasReleaseFilter || !stateFilterIsDefault || !teamFilterIsDefault;
   const productLabelByValue = useMemo(
     () => new Map(products.map((p) => [p.value, p.label] as const)),
     [products],
@@ -824,10 +848,8 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
       products: selectedProducts,
       versions: selectedVersions,
       patches: selectedPatches,
-      states: selectedStates,
-      team: filterTeam,
     });
-  }, [selectedProducts, selectedVersions, selectedPatches, selectedStates, filterTeam]);
+  }, [selectedProducts, selectedVersions, selectedPatches]);
 
   return (
     <div>
@@ -852,12 +874,6 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
             selected={selectedPatches}
             onChange={setSelectedPatches}
           />
-          <MultiSelect
-            label="État"
-            options={stateFilterOptions}
-            selected={selectedStates}
-            onChange={setSelectedStates}
-          />
 
           <div className="ml-auto flex items-center gap-2">
             {hasFilter && (
@@ -866,8 +882,8 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
                   setSelectedProducts([]);
                   setSelectedVersions([]);
                   setSelectedPatches([]);
-                  setSelectedStates([]);
-                  setFilterTeam(null);
+                  setSelectedStates([...DEFAULT_RELEASE_STATES]);
+                  setSelectedTeams([...teamLegendOptions]);
                 }}
                 className="text-xs text-blue-500 hover:text-blue-700 border border-blue-200 rounded-full px-2.5 py-1"
               >
@@ -919,29 +935,6 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
                 <span className="leading-none">×</span>
               </button>
             ))}
-            {selectedStates.map((stateName) => (
-              <button
-                key={`state-${stateName}`}
-                type="button"
-                onClick={() => setSelectedStates((prev) => prev.filter((x) => x !== stateName))}
-                className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] text-amber-700 hover:border-amber-300"
-                title="Supprimer ce filtre d'état"
-              >
-                <span>{`État: ${stateName}`}</span>
-                <span className="leading-none">×</span>
-              </button>
-            ))}
-            {filterTeam && (
-              <button
-                type="button"
-                onClick={() => setFilterTeam(null)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] text-violet-700 hover:border-violet-300"
-                title="Supprimer ce filtre d'équipe"
-              >
-                <span>{`Équipe: ${filterTeam}`}</span>
-                <span className="leading-none">×</span>
-              </button>
-            )}
           </div>
         )}
 
@@ -956,14 +949,14 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
           title="Par état - cliquer pour filtrer"
           selected={selectedStates}
           onSelect={toggleState}
-          onClear={() => setSelectedStates([])}
+          onClear={() => setSelectedStates([...DEFAULT_RELEASE_STATES])}
         />
         <ClickablePie
           data={teamPieData}
           title="Par équipe - cliquer pour filtrer"
-          selected={filterTeam}
+          selected={selectedTeams}
           onSelect={toggleTeam}
-          onClear={() => setFilterTeam(null)}
+          onClear={() => setSelectedTeams([...teamLegendOptions])}
           compactLegendCount={5}
         />
       </div>
@@ -973,7 +966,8 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
               <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-16">ID</th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Titre</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-[38%]">Titre</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-36">Version souhaitée</th>
               <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-24">État</th>
               <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-32">Équipe</th>
               <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-28">Sprint</th>
@@ -981,7 +975,7 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
           </thead>
           <tbody>
             {filteredBugs.map((bug) => {
-              const rowActive = selectedStates.length === 1 && selectedStates[0] === bug.state && filterTeam === bug.team;
+              const rowActive = selectedStates.length === 1 && selectedStates[0] === bug.state && selectedTeams.length === 1 && selectedTeams[0] === bug.team;
               return (
                 <tr
                   key={bug.id}
@@ -993,8 +987,24 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
                   title="Cliquer pour filtrer sur cet état + cette équipe"
                 >
                   <td className="px-4 py-2 font-mono text-gray-400">{bug.id}</td>
-                  <td className="px-4 py-2 text-gray-700 max-w-0" style={{ maxWidth: 420 }}>
-                    <span className="truncate block" title={bug.title}>{bug.title}</span>
+                  <td className="px-4 py-2 text-gray-700 max-w-0" style={{ maxWidth: 320 }}>
+                    <span
+                      title={bug.title}
+                      style={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        whiteSpace: 'normal',
+                        lineHeight: '1.25rem',
+                        maxHeight: '2.5rem',
+                      }}
+                    >
+                      {bug.title}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-gray-600 font-mono">
+                    {(bug.version && bug.version.trim().length > 0) ? bug.version : 'vide'}
                   </td>
                   <td className="px-4 py-2">
                     <span className={[
@@ -1010,7 +1020,7 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
               );
             })}
             {filteredBugs.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400 text-xs">Aucun bug pour ces filtres</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-xs">Aucun bug pour ces filtres</td></tr>
             )}
           </tbody>
         </table>

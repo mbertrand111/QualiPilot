@@ -148,6 +148,7 @@ const CARDS: { key: ActiveCard; label: string; color: string; borderColor: strin
 
 const ALL_STATES = ['New', 'Active', 'Resolved', 'Closed'];
 const DEFAULT_STATES = ['New', 'Active'];
+const FILIERE_OPTIONS = ['GC', 'CO', 'IW'];
 const LIMIT = 50;
 
 // Zones ADO (valeurs stockées dans la colonne team)
@@ -198,6 +199,7 @@ export default function Triage() {
     const valid = ['live', 'onpremise', 'hors_version', 'uncategorized'];
     return bt ? bt.split(',').filter(v => valid.includes(v)) : [];
   });
+  const [filterFilieres, setFilterFilieres] = useState<string[]>([]);
   const [filterId,       setFilterId]       = useState('');
   const [filterTitle,    setFilterTitle]    = useState('');
   const [filterVersion,  setFilterVersion]  = useState('');
@@ -226,13 +228,14 @@ export default function Triage() {
     if (filterStates.length)   params.set('state',    filterStates.join(','));
     if (filterSprints.length)  params.set('sprint',   filterSprints.join(','));
     if (filterBugTypes.length) params.set('bug_type', filterBugTypes.join(','));
+    if (filterFilieres.length) params.set('filiere',  filterFilieres.join(','));
     if (filterId)       params.set('id',       filterId);
     if (filterTitle)    params.set('title',    filterTitle);
     if (filterVersion)  params.set('version',  filterVersion);
     if (filterFoundIn)  params.set('found_in', filterFoundIn);
     if (filterBuild)    params.set('build',    filterBuild);
     fetch(`/api/stats/triage?${params}`).then(r => r.json()).then(setTriageStats).catch(() => {});
-  }, [filterStates, filterSprints, filterBugTypes, filterId, filterTitle, filterVersion, filterFoundIn, filterBuild]);
+  }, [filterStates, filterSprints, filterBugTypes, filterFilieres, filterId, filterTitle, filterVersion, filterFoundIn, filterBuild]);
 
   useEffect(() => {
     loadTriageStats();
@@ -275,6 +278,7 @@ export default function Triage() {
 
       if (filterSprints.length)  params.set('sprint',    filterSprints.join(','));
       if (filterBugTypes.length) params.set('bug_type',  filterBugTypes.join(','));
+      if (filterFilieres.length) params.set('filiere',   filterFilieres.join(','));
       if (filterId)       params.set('id',       filterId);
       if (filterTitle)    params.set('title',    filterTitle);
       if (filterVersion)  params.set('version',  filterVersion);
@@ -292,7 +296,7 @@ export default function Triage() {
     } finally {
       setLoading(false);
     }
-  }, [activeCard, filterTeams, filterZones, filterStates, filterSprints, filterBugTypes, filterId, filterTitle, filterVersion, filterFoundIn, filterBuild, sort, dir]);
+  }, [activeCard, filterTeams, filterZones, filterStates, filterSprints, filterBugTypes, filterFilieres, filterId, filterTitle, filterVersion, filterFoundIn, filterBuild, sort, dir]);
 
   const {
     step: syncStep,
@@ -325,7 +329,7 @@ export default function Triage() {
   }
 
   function resetFilters() {
-    setFilterTeams([]); setFilterZones([]); setFilterStates(DEFAULT_STATES); setFilterSprints([]); setFilterBugTypes([]);
+    setFilterTeams([]); setFilterZones([]); setFilterStates(DEFAULT_STATES); setFilterSprints([]); setFilterBugTypes([]); setFilterFilieres([]);
     setFilterId(''); setFilterTitle(''); setFilterVersion(''); setFilterFoundIn(''); setFilterBuild('');
   }
 
@@ -381,7 +385,7 @@ export default function Triage() {
   // ─── Dérivés ────────────────────────────────────────────────────────────────
 
   const statesChanged = filterStates.length !== DEFAULT_STATES.length || filterStates.some(s => !DEFAULT_STATES.includes(s));
-  const hasFilters = filterTeams.length || filterZones.length || statesChanged || filterSprints.length || filterBugTypes.length || filterId || filterTitle || filterVersion || filterFoundIn || filterBuild;
+  const hasFilters = filterTeams.length || filterZones.length || statesChanged || filterSprints.length || filterBugTypes.length || filterFilieres.length || filterId || filterTitle || filterVersion || filterFoundIn || filterBuild;
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
@@ -477,6 +481,12 @@ export default function Triage() {
             selected={filterBugTypes}
             onChange={setFilterBugTypes}
             renderOption={opt => <span>{BUG_TYPE_LABELS[opt] ?? opt}</span>}
+          />
+          <MultiSelect
+            label="Filière"
+            options={FILIERE_OPTIONS}
+            selected={filterFilieres}
+            onChange={setFilterFilieres}
           />
           {hasFilters && (
             <button onClick={resetFilters} className="text-sm text-gray-400 hover:text-gray-600 underline underline-offset-2 ml-1">
@@ -668,7 +678,7 @@ export default function Triage() {
               value={bulkValue}
               onChange={e => setBulkValue(e.target.value)}
               placeholder="Nouvelle valeur..."
-              className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 flex-1 min-w-0"
+              className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 flex-1 min-w-[180px]"
             />
           )}
 
@@ -682,7 +692,7 @@ export default function Triage() {
 
           <button
             onClick={() => setSelectedIds(new Set())}
-            className="shrink-0 text-white/50 hover:text-white transition-colors ml-auto"
+            className="shrink-0 text-white/50 hover:text-white transition-colors"
             title="Désélectionner tout"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>

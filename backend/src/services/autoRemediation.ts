@@ -21,6 +21,28 @@ const RULE_BY_FIELD: Record<'priority' | 'integration_build', string> = {
   integration_build: 'INTEGRATION_BUILD_NOT_EMPTIED',
 };
 
+function getAutoRuleFlags(db: ReturnType<typeof getDb>): { priority: boolean; integration_build: boolean } {
+  const rows = db.prepare(`
+    SELECT code, active
+    FROM conformity_rules
+    WHERE code IN (?, ?)
+  `).all(RULE_BY_FIELD.priority, RULE_BY_FIELD.integration_build) as Array<{ code: string; active: number }>;
+
+  const flags = {
+    priority: true,
+    integration_build: true,
+  };
+
+  for (const row of rows) {
+    if (row.code === RULE_BY_FIELD.priority) {
+      flags.priority = row.active === 1;
+    } else if (row.code === RULE_BY_FIELD.integration_build) {
+      flags.integration_build = row.active === 1;
+    }
+  }
+  return flags;
+}
+
 function logAutoFix(
   workItemId: number,
   ruleCode: string,
@@ -99,59 +121,65 @@ export async function runAutoRemediation(trigger: AutoRemediationTrigger): Promi
   };
 
   try {
-    const priorityCandidates = db.prepare(`
-      SELECT id
-      FROM bugs_cache
-      WHERE priority IS NULL OR priority <> 2
-      ORDER BY id ASC
-    `).all() as { id: number }[];
+    const enabled = getAutoRuleFlags(db);
 
-    result.priority.attempted = priorityCandidates.length;
-    for (const row of priorityCandidates) {
-      try {
-        const write = await writeField(row.id, 'priority', 2, { runConformity: false });
-        result.priority.updated += 1;
-        logAutoFix(
-          row.id,
-          RULE_BY_FIELD.priority,
-          'priority',
-          write.old_value,
-          write.new_value,
-          trigger,
-          runId,
-        );
-      } catch (e) {
-        result.priority.failed += 1;
-        logger.warn({ err: e, bugId: row.id, field: 'priority', trigger }, 'Auto-remediation write failed');
+    if (enabled.priority) {
+      const priorityCandidates = db.prepare(`
+        SELECT id
+        FROM bugs_cache
+        WHERE priority IS NULL OR priority <> 2
+        ORDER BY id ASC
+      `).all() as { id: number }[];
+
+      result.priority.attempted = priorityCandidates.length;
+      for (const row of priorityCandidates) {
+        try {
+          const write = await writeField(row.id, 'priority', 2, { runConformity: false });
+          result.priority.updated += 1;
+          logAutoFix(
+            row.id,
+            RULE_BY_FIELD.priority,
+            'priority',
+            write.old_value,
+            write.new_value,
+            trigger,
+            runId,
+          );
+        } catch (e) {
+          result.priority.failed += 1;
+          logger.warn({ err: e, bugId: row.id, field: 'priority', trigger }, 'Auto-remediation write failed');
+        }
       }
     }
 
-    const buildCandidates = db.prepare(`
-      SELECT id
-      FROM bugs_cache
-      WHERE state IN ('New', 'Active')
-        AND integration_build IS NOT NULL
-        AND TRIM(integration_build) <> ''
-      ORDER BY id ASC
-    `).all() as { id: number }[];
+    if (enabled.integration_build) {
+      const buildCandidates = db.prepare(`
+        SELECT id
+        FROM bugs_cache
+        WHERE state IN ('New', 'Active')
+          AND integration_build IS NOT NULL
+          AND TRIM(integration_build) <> ''
+        ORDER BY id ASC
+      `).all() as { id: number }[];
 
-    result.integration_build.attempted = buildCandidates.length;
-    for (const row of buildCandidates) {
-      try {
-        const write = await writeField(row.id, 'integration_build', '', { runConformity: false });
-        result.integration_build.updated += 1;
-        logAutoFix(
-          row.id,
-          RULE_BY_FIELD.integration_build,
-          'integration_build',
-          write.old_value,
-          write.new_value,
-          trigger,
-          runId,
-        );
-      } catch (e) {
-        result.integration_build.failed += 1;
-        logger.warn({ err: e, bugId: row.id, field: 'integration_build', trigger }, 'Auto-remediation write failed');
+      result.integration_build.attempted = buildCandidates.length;
+      for (const row of buildCandidates) {
+        try {
+          const write = await writeField(row.id, 'integration_build', '', { runConformity: false });
+          result.integration_build.updated += 1;
+          logAutoFix(
+            row.id,
+            RULE_BY_FIELD.integration_build,
+            'integration_build',
+            write.old_value,
+            write.new_value,
+            trigger,
+            runId,
+          );
+        } catch (e) {
+          result.integration_build.failed += 1;
+          logger.warn({ err: e, bugId: row.id, field: 'integration_build', trigger }, 'Auto-remediation write failed');
+        }
       }
     }
 

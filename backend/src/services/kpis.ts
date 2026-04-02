@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import { classifyBug } from './bugClassifier';
-import { PI_WINDOWS, type PiWindow } from '../config/sprints';
+import type { PiWindow } from '../config/sprints';
+import { getConfiguredPiWindows } from './sprintCalendar';
 
 type BugRow = {
   id: number;
@@ -286,14 +287,14 @@ function loadRows(db: Database.Database): BugRow[] {
   `).all() as BugRow[];
 }
 
-function activePiWindows(): PiWindow[] {
+function activePiWindows(db: Database.Database): PiWindow[] {
   const now = Date.now();
-  return PI_WINDOWS.filter((w) => startOfDayMs(w.start) <= now);
+  return getConfiguredPiWindows(db).filter((w) => startOfDayMs(w.start) <= now);
 }
 
 export function defectDebtByPi(db: Database.Database): DefectDebtRow[] {
   const rows = loadRows(db);
-  const windows = activePiWindows();
+  const windows = activePiWindows(db);
 
   return windows.map((window) => {
     const startMs = startOfDayMs(window.start);
@@ -462,7 +463,7 @@ export function pointBacklog(db: Database.Database): PointBacklogResult {
 
 export function closedByPi(db: Database.Database): ClosedByPiResult {
   const rows = loadRows(db);
-  const windows = activePiWindows();
+  const windows = activePiWindows(db);
 
   const baseByProduct = windows.map((w) => ({
     pi: w.label,
