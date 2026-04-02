@@ -47,15 +47,35 @@ const C = {
 
 // â”€â”€â”€ Mock Data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+interface DefectDebtPiRow {
+  pi: string;
+  global: number;
+  live: number;
+  onpremise: number;
+  hors: number;
+  openedGlobal: number;
+  closedGlobal: number;
+  openedLive: number;
+  closedLive: number;
+  openedOnpremise: number;
+  closedOnpremise: number;
+  openedHors: number;
+  closedHors: number;
+  endGlobal: number;
+  endLive: number;
+  endOnpremise: number;
+  endHors: number;
+}
+
 // Tab 1 â€” Defect Debt (crees - fermes par PI)
-const DD_RAW = [
-  { pi: '24-25 PI4', global:  120, live:  55, onpremise: -10, hors:   2, endGlobal: 340, endLive:  85, endOnpremise: 230, endHors: 25 },
-  { pi: '24-25 PI5', global: -180, live: -45, onpremise:  -8, hors:  -3, endGlobal: 295, endLive:  65, endOnpremise: 210, endHors: 20 },
-  { pi: '24-25 PI6', global: -290, live: -80, onpremise:   5, hors:   5, endGlobal: 420, endLive: 120, endOnpremise: 270, endHors: 30 },
-  { pi: '25-26 PI1', global:  180, live:  60, onpremise:  35, hors:   4, endGlobal: 265, endLive: 100, endOnpremise: 140, endHors: 25 },
-  { pi: '25-26 PI2', global: -160, live: -75, onpremise: -22, hors:  -5, endGlobal: 220, endLive:  95, endOnpremise: 108, endHors: 17 },
-  { pi: '25-26 PI3', global:   35, live:  12, onpremise:   8, hors:   1, endGlobal: 247, endLive: 107, endOnpremise: 122, endHors: 18 },
-  { pi: '25-26 PI4', global:   48, live:  18, onpremise:  10, hors:   2, endGlobal: 252, endLive: 110, endOnpremise: 124, endHors: 18 },
+const DD_RAW: DefectDebtPiRow[] = [
+  { pi: '24-25 PI4', global:  120, live:  55, onpremise: -10, hors:   2, openedGlobal: 390, closedGlobal: 270, openedLive: 180, closedLive: 125, openedOnpremise: 90, closedOnpremise: 100, openedHors: 18, closedHors: 16, endGlobal: 340, endLive:  85, endOnpremise: 230, endHors: 25 },
+  { pi: '24-25 PI5', global: -180, live: -45, onpremise:  -8, hors:  -3, openedGlobal: 260, closedGlobal: 440, openedLive: 90, closedLive: 135, openedOnpremise: 84, closedOnpremise: 92, openedHors: 20, closedHors: 23, endGlobal: 295, endLive:  65, endOnpremise: 210, endHors: 20 },
+  { pi: '24-25 PI6', global: -290, live: -80, onpremise:   5, hors:   5, openedGlobal: 210, closedGlobal: 500, openedLive: 60, closedLive: 140, openedOnpremise: 98, closedOnpremise: 93, openedHors: 22, closedHors: 17, endGlobal: 420, endLive: 120, endOnpremise: 270, endHors: 30 },
+  { pi: '25-26 PI1', global:  180, live:  60, onpremise:  35, hors:   4, openedGlobal: 430, closedGlobal: 250, openedLive: 210, closedLive: 150, openedOnpremise: 130, closedOnpremise: 95, openedHors: 24, closedHors: 20, endGlobal: 265, endLive: 100, endOnpremise: 140, endHors: 25 },
+  { pi: '25-26 PI2', global: -160, live: -75, onpremise: -22, hors:  -5, openedGlobal: 255, closedGlobal: 415, openedLive: 95, closedLive: 170, openedOnpremise: 75, closedOnpremise: 97, openedHors: 18, closedHors: 23, endGlobal: 220, endLive:  95, endOnpremise: 108, endHors: 17 },
+  { pi: '25-26 PI3', global:   35, live:  12, onpremise:   8, hors:   1, openedGlobal: 286, closedGlobal: 251, openedLive: 132, closedLive: 120, openedOnpremise: 92, closedOnpremise: 84, openedHors: 17, closedHors: 16, endGlobal: 247, endLive: 107, endOnpremise: 122, endHors: 18 },
+  { pi: '25-26 PI4', global:   48, live:  18, onpremise:  10, hors:   2, openedGlobal: 300, closedGlobal: 252, openedLive: 138, closedLive: 120, openedOnpremise: 94, closedOnpremise: 84, openedHors: 19, closedHors: 17, endGlobal: 252, endLive: 110, endOnpremise: 124, endHors: 18 },
 ];
 
 // Tab 2 â€” Backlog evolution (snapshots mensuels)
@@ -234,8 +254,9 @@ const STATE_BADGE: Record<string, string> = {
 // â”€â”€â”€ Tab 1 : Defect Debt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface DebtRow { pi: string; debt: number; endBugs: number }
+interface DebtOpenClosedRow { pi: string; opened: number; closed: number }
 
-function DebtChart({ title, data }: { title: string; data: DebtRow[] }) {
+function DebtChart({ title, data, integerYAxis = false }: { title: string; data: DebtRow[]; integerYAxis?: boolean }) {
   return (
     <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-3">{title}</div>
@@ -243,8 +264,8 @@ function DebtChart({ title, data }: { title: string; data: DebtRow[] }) {
         <ComposedChart data={data} margin={{ top: 5, right: 30, left: -15, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
           <XAxis dataKey="pi" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-          <YAxis yAxisId="left"  tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-          <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+          <YAxis yAxisId="left" allowDecimals={!integerYAxis} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+          <YAxis yAxisId="right" allowDecimals={!integerYAxis} orientation="right" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
           <Tooltip contentStyle={ttStyle()} />
           <ReferenceLine yAxisId="left" y={0} stroke="#d1d5db" />
           <Bar yAxisId="left" dataKey="debt" name="Defect Debt" maxBarSize={44} radius={[3, 3, 0, 0]}>
@@ -260,8 +281,34 @@ function DebtChart({ title, data }: { title: string; data: DebtRow[] }) {
   );
 }
 
+function DebtOpenClosedChart({
+  title,
+  data,
+  integerYAxis = false,
+}: {
+  title: string;
+  data: DebtOpenClosedRow[];
+  integerYAxis?: boolean;
+}) {
+  return (
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-3">{title}</div>
+      <ResponsiveContainer width="100%" height={200}>
+        <ComposedChart data={data} margin={{ top: 5, right: 20, left: -15, bottom: 0 }} barGap={1} barCategoryGap="22%">
+          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+          <XAxis dataKey="pi" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+          <YAxis allowDecimals={!integerYAxis} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+          <Tooltip contentStyle={ttStyle()} />
+          <Bar dataKey="opened" name="Bugs ouverts" maxBarSize={30} radius={[3, 3, 0, 0]} fill="#74B6FF" />
+          <Bar dataKey="closed" name="Bugs fermés" maxBarSize={30} radius={[3, 3, 0, 0]} fill="#F39FBE" />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function DefectDebtTab({ refreshKey }: { refreshKey: number }) {
-  const [rows, setRows] = useState(DD_RAW);
+  const [rows, setRows] = useState<DefectDebtPiRow[]>(DD_RAW);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPis, setSelectedPis] = useState<Set<string>>(new Set());
@@ -326,12 +373,26 @@ function DefectDebtTab({ refreshKey }: { refreshKey: number }) {
         <DebtChart title="Global"            data={filtered.map(d => ({ pi: d.pi, debt: d.global,    endBugs: d.endGlobal    }))} />
         <DebtChart title="Live (FAH)"        data={filtered.map(d => ({ pi: d.pi, debt: d.live,      endBugs: d.endLive      }))} />
         <DebtChart title="OnPremise (13.8x)" data={filtered.map(d => ({ pi: d.pi, debt: d.onpremise, endBugs: d.endOnpremise }))} />
-        <DebtChart title="Hors version"      data={filtered.map(d => ({ pi: d.pi, debt: d.hors,      endBugs: d.endHors      }))} />
+        <DebtChart title="Hors version"      integerYAxis data={filtered.map(d => ({ pi: d.pi, debt: d.hors,      endBugs: d.endHors      }))} />
       </div>
       <div className="flex items-center gap-5 mt-3 text-[11px] text-gray-400">
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500" /> Dette qui diminue</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-500" /> Dette qui augmente</span>
         <span className="flex items-center gap-1.5"><span className="inline-block w-6 border-t-2 border-purple-400" /> Bugs ouverts fin PI</span>
+      </div>
+
+      <div className="mt-6 mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+        Ouverts vs fermes par PI
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <DebtOpenClosedChart title="Global"            data={filtered.map(d => ({ pi: d.pi, opened: d.openedGlobal,    closed: d.closedGlobal    }))} />
+        <DebtOpenClosedChart title="Live (FAH)"        data={filtered.map(d => ({ pi: d.pi, opened: d.openedLive,      closed: d.closedLive      }))} />
+        <DebtOpenClosedChart title="OnPremise (13.8x)" data={filtered.map(d => ({ pi: d.pi, opened: d.openedOnpremise, closed: d.closedOnpremise }))} />
+        <DebtOpenClosedChart title="Hors version"      integerYAxis data={filtered.map(d => ({ pi: d.pi, opened: d.openedHors,      closed: d.closedHors      }))} />
+      </div>
+      <div className="flex items-center gap-5 mt-3 text-[11px] text-gray-400">
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#74B6FF]" /> Bugs ouverts (crees dans le PI)</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#F39FBE]" /> Bugs fermes (fermes/resolus dans le PI)</span>
       </div>
     </div>
   );

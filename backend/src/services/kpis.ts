@@ -24,6 +24,14 @@ type DefectDebtRow = {
   live: number;
   onpremise: number;
   hors: number;
+  openedGlobal: number;
+  closedGlobal: number;
+  openedLive: number;
+  closedLive: number;
+  openedOnpremise: number;
+  closedOnpremise: number;
+  openedHors: number;
+  closedHors: number;
   endGlobal: number;
   endLive: number;
   endOnpremise: number;
@@ -349,6 +357,14 @@ export function defectDebtByPi(db: Database.Database): DefectDebtRow[] {
       live: createdLive - closedLive,
       onpremise: createdOnPrem - closedOnPrem,
       hors: createdHors - closedHors,
+      openedGlobal: createdGlobal,
+      closedGlobal,
+      openedLive: createdLive,
+      closedLive,
+      openedOnpremise: createdOnPrem,
+      closedOnpremise: closedOnPrem,
+      openedHors: createdHors,
+      closedHors,
       endGlobal,
       endLive,
       endOnpremise: endOnPrem,
