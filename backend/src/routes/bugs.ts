@@ -83,10 +83,10 @@ router.get('/bugs', (req, res) => {
     ? req.query.bug_type.split(',').filter(v => validBugTypes.has(v))
     : [];
   if (bugTypes.length === 1) {
-    conditions.push('classify_bug(version_souhaitee, found_in) = ?');
+    conditions.push('classify_bug(version_souhaitee, found_in, integration_build, raison_origine, title) = ?');
     params.push(bugTypes[0]);
   } else if (bugTypes.length > 1) {
-    conditions.push(`classify_bug(version_souhaitee, found_in) IN (${bugTypes.map(() => '?').join(',')})`);
+    conditions.push(`classify_bug(version_souhaitee, found_in, integration_build, raison_origine, title) IN (${bugTypes.map(() => '?').join(',')})`);
     params.push(...bugTypes);
   }
 

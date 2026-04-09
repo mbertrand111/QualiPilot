@@ -11,6 +11,7 @@ export interface BugRow {
   found_in: string | null;
   integration_build: string | null;
   version_souhaitee: string | null;
+  raison_origine: string | null;
   resolved_reason: string | null;
   created_date: string | null;
 }
@@ -82,6 +83,25 @@ function normalizeToken(v: string): string {
     .replace(/[^A-Z0-9]/g, '');
 }
 
+function containsIsacuveWeb(v: string | null | undefined): boolean {
+  const token = normalizeToken(t(v));
+  return token.includes('ISACUVEWEB');
+}
+
+function isExplicitHorsVersion(v: string | null | undefined): boolean {
+  const token = normalizeToken(t(v));
+  return token === 'NONCONCERNE' || token.includes('ISACUVEWEB');
+}
+
+function hasHorsVersionSignal(bug: BugRow): boolean {
+  return (
+    isExplicitHorsVersion(bug.version_souhaitee)
+    || containsIsacuveWeb(bug.found_in)
+    || containsIsacuveWeb(bug.integration_build)
+    || containsIsacuveWeb(bug.raison_origine)
+  );
+}
+
 function isValidFahVersionFormat(v: string): boolean {
   // Format standard : FAH_xx.yy — yy doit être multiple de 5
   const m = v.match(/^FAH_(\d{2})\.(\d+)(?:\s+Patch\s+\d+)?$/i);
@@ -90,8 +110,16 @@ function isValidFahVersionFormat(v: string): boolean {
 }
 
 function isValidOnPremisePatchFormat(v: string): boolean {
-  // Format Patch OnPremise : "13.87.xxx Patch N" — le numéro est obligatoire
-  return /^\d+\.\d+\.\d+\s+Patch\s+\d+$/i.test(v);
+  // Format Patch OnPremise : "13.87.xxx Patch N" - xxx multiple de 50, N obligatoire
+  const m = v.match(/^13\.87\.(\d+)\s+Patch\s+(\d+)$/i);
+  if (!m) return false;
+  return parseInt(m[1], 10) % 50 === 0;
+}
+function isValidOnPremiseMajorFormat(v: string): boolean {
+  // Format OnPremise standard : "13.87.xxx" - xxx multiple de 50
+  const m = v.match(/^13\.87\.(\d+)$/);
+  if (!m) return false;
+  return parseInt(m[1], 10) % 50 === 0;
 }
 
 function foundInYear(foundIn: string): number | null {
@@ -147,7 +175,8 @@ export function evalTriageAreaCheck(bug: BugRow): boolean {
 
   // 1. Bug Closed dans toute zone triage → version ET build doivent être "-"
   if (state === 'Closed') {
-    if (v !== '-' || b !== '-') return true;
+    // Cas Hors version (ex: Isacuve Web): on ne force pas "-" ici.
+    if (!hasHorsVersionSignal(bug) && (v !== '-' || b !== '-')) return true;
   }
 
   // 2. Bug non-Closed exactement à la racine "Bugs à corriger" → doit être sous-classé
@@ -155,10 +184,13 @@ export function evalTriageAreaCheck(bug: BugRow): boolean {
 
   // 3-5. Cohérence produit/sous-dossier
   if (area.startsWith(CORRIGER_PREFIX)) {
+    if (hasHorsVersionSignal(bug)) {
+      if (!area.startsWith(VERSIONS_HORS)) return true;
+      return false;
+    }
     const foundIn = t(bug.found_in);
     if (isLiveBug(foundIn) && area.startsWith(VERSIONS_HISTORIQUES)) return true;
     if (isOnPremiseBug(foundIn) && !isRequalifiedToLive(foundIn) && area.startsWith(VERSIONS_LIVE)) return true;
-    if (v === 'Non concerné' && !area.startsWith(VERSIONS_HORS)) return true;
   }
 
   return false;
@@ -178,6 +210,7 @@ export function evalNonClosedTransverseArea(bug: BugRow): boolean {
 
 /** FAH_VERSION_REQUIRED — bugs LIVE (found_in année ≥ 14) doivent avoir version contenant "FAH_" */
 export function evalFahVersionRequired(bug: BugRow): boolean {
+  if (hasHorsVersionSignal(bug)) return false;
   const foundIn = t(bug.found_in);
   if (!foundIn) return false;
   const year = foundInYear(foundIn);
@@ -200,6 +233,7 @@ export function evalClosedBugCoherence(bug: BugRow): boolean {
 
 /** VERSION_CHECK — format de version_souhaitee valide selon le type de bug */
 export function evalVersionCheck(bug: BugRow): boolean {
+  if (hasHorsVersionSignal(bug)) return false;
   const v = t(bug.version_souhaitee);
   if (!v) return false; // vide = OK pour ce check
   if (VERSION_SPECIAL_OK.has(v)) return false;
@@ -212,14 +246,17 @@ export function evalVersionCheck(bug: BugRow): boolean {
     return !isValidFahVersionFormat(v);
   }
   if (isOnPremiseBug(foundIn)) {
-    // Un format FAH valide est accepté même sur un bug OnPremise
-    // (la cohérence cross-produit est vérifiée par TRIAGE_AREA_CHECK)
+    // A valid FAH format is still accepted for an OnPremise bug.
+    // Cross-product consistency is checked by TRIAGE_AREA_CHECK.
     if (isValidFahVersionFormat(v)) return false;
-    // Format Patch OnPremise valide : "13.87.xxx Patch N" — cohérence vérifiée par VERSION_BUILD_COHERENCE
+    // Legacy on-premise 12.x accepted.
+    if (/^12\.\d+(?:\.\d+)?$/.test(v)) return false;
+    // Format OnPremise standard valide : "13.87.xxx" avec xxx multiple de 50
+    if (isValidOnPremiseMajorFormat(v)) return false;
+    // Format Patch OnPremise valide : "13.87.xxx Patch N" (xxx multiple de 50)
+    // Patch/build consistency is checked by VERSION_BUILD_COHERENCE.
     if (isValidOnPremisePatchFormat(v)) return false;
-    // Autre usage de mots-clés patch/hotfix → format invalide
-    if (/\b(patch|hotfix)\b/i.test(v)) return true;
-    return !v.startsWith('12.') && !v.startsWith('13.8');
+    return true;
   }
   return false; // type inconnu → pas d'erreur
 }
@@ -262,6 +299,7 @@ export function evalBuildCheck(bug: BugRow, rawConfig: string): boolean {
  * - Format Patch : "FAH_XX.YY Patch N" → build doit être "XX.YY.ZZZ-N"
  */
 export function evalVersionBuildCoherence(bug: BugRow): boolean {
+  if (hasHorsVersionSignal(bug)) return false;
   const foundIn = t(bug.found_in);
   const v       = t(bug.version_souhaitee);
 
@@ -329,7 +367,7 @@ export function runConformityCheck(): ConformityCheckResult {
 
   const bugs = db.prepare(`
     SELECT id, state, priority, area_path, found_in, integration_build,
-           version_souhaitee, resolved_reason, created_date
+           version_souhaitee, raison_origine, resolved_reason, created_date
     FROM bugs_cache
   `).all() as BugRow[];
 
@@ -396,3 +434,4 @@ export function runConformityCheck(): ConformityCheckResult {
   logger.info({ checkedBugs: bugs.length, newViolations, resolvedViolations }, 'Conformity check completed');
   return { checkedBugs: bugs.length, newViolations, resolvedViolations, runAt };
 }
+

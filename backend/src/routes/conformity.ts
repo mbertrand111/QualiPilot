@@ -142,8 +142,8 @@ router.get('/conformity/violations', (req, res) => {
   else if (states.length > 1){ baseConditions.push(`b.state IN (${states.map(() => '?').join(',')})`); baseParams.push(...states); }
   if (sprints.length === 1)   { baseConditions.push('b.sprint = ?');                                    baseParams.push(sprints[0]); }
   else if (sprints.length > 1){ baseConditions.push(`b.sprint IN (${sprints.map(() => '?').join(',')})`); baseParams.push(...sprints); }
-  if (bugTypes.length === 1)   { baseConditions.push('classify_bug(b.version_souhaitee, b.found_in) = ?');                                              baseParams.push(bugTypes[0]); }
-  else if (bugTypes.length > 1){ baseConditions.push(`classify_bug(b.version_souhaitee, b.found_in) IN (${bugTypes.map(() => '?').join(',')})`);        baseParams.push(...bugTypes); }
+  if (bugTypes.length === 1)   { baseConditions.push('classify_bug(b.version_souhaitee, b.found_in, b.integration_build, b.raison_origine, b.title) = ?');                                              baseParams.push(bugTypes[0]); }
+  else if (bugTypes.length > 1){ baseConditions.push(`classify_bug(b.version_souhaitee, b.found_in, b.integration_build, b.raison_origine, b.title) IN (${bugTypes.map(() => '?').join(',')})`);        baseParams.push(...bugTypes); }
 
   if (idContains)      { baseConditions.push("CAST(b.id AS TEXT) LIKE ?");  baseParams.push(`%${idContains}%`); }
   if (titleContains)   { baseConditions.push('b.title LIKE ?');             baseParams.push(`%${titleContains}%`); }

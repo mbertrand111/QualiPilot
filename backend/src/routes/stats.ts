@@ -168,7 +168,7 @@ router.get('/stats/home', (_req, res) => {
   const db = getDb();
 
   const rows = db.prepare(`
-    SELECT classify_bug(version_souhaitee, found_in) AS bug_type, COUNT(*) AS count
+    SELECT classify_bug(version_souhaitee, found_in, integration_build, raison_origine, title) AS bug_type, COUNT(*) AS count
     FROM bugs_cache
     WHERE state IN ('New', 'Active')
     GROUP BY bug_type
@@ -243,8 +243,8 @@ router.get('/stats/triage', (req, res) => {
   const validBugTypes = new Set(['live', 'onpremise', 'hors_version', 'uncategorized']);
   const bugTypes = typeof req.query.bug_type === 'string' && req.query.bug_type
     ? req.query.bug_type.split(',').filter(v => validBugTypes.has(v)) : [];
-  if (bugTypes.length === 1)   { conditions.push('classify_bug(version_souhaitee, found_in) = ?');                                               params.push(bugTypes[0]); }
-  else if (bugTypes.length > 1){ conditions.push(`classify_bug(version_souhaitee, found_in) IN (${bugTypes.map(() => '?').join(',')})`);         params.push(...bugTypes); }
+  if (bugTypes.length === 1)   { conditions.push('classify_bug(version_souhaitee, found_in, integration_build, raison_origine, title) = ?');                                               params.push(bugTypes[0]); }
+  else if (bugTypes.length > 1){ conditions.push(`classify_bug(version_souhaitee, found_in, integration_build, raison_origine, title) IN (${bugTypes.map(() => '?').join(',')})`);         params.push(...bugTypes); }
 
   // text filters
   const titleContains   = typeof req.query.title    === 'string' ? req.query.title.trim()    : null;

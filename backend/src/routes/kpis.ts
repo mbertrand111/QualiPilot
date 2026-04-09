@@ -5,7 +5,9 @@ import {
   backlogEvolution,
   closedByPi,
   defectDebtByPi,
+  piFollowup,
   pointBacklog,
+  retentionKpis,
   terrainReturnsByExercise,
   teamBacklogs,
 } from '../services/kpis';
@@ -45,6 +47,15 @@ router.get('/kpis/point-backlog', (req, res) => {
   }
 });
 
+router.get('/kpis/pi-followup', (_req, res) => {
+  try {
+    const db = getDb();
+    res.json(piFollowup(db));
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unexpected error' });
+  }
+});
+
 router.get('/kpis/closed-by-pi', (_req, res) => {
   try {
     const db = getDb();
@@ -67,6 +78,15 @@ router.get('/kpis/terrain-returns', (_req, res) => {
   try {
     const db = getDb();
     res.json(terrainReturnsByExercise(db));
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unexpected error' });
+  }
+});
+
+router.get('/kpis/retention', (_req, res) => {
+  try {
+    const db = getDb();
+    res.json(retentionKpis(db));
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Unexpected error' });
   }

@@ -1,6 +1,7 @@
 ﻿import type Database from 'better-sqlite3';
 import { getDb } from '../db';
 import { teamBacklogs, type TeamBacklog, type TeamBacklogBug } from './kpis';
+import { getSprintCalendarSettings } from './sprintCalendar';
 
 const TEAM_ORDER = ['COCO', 'GO FAHST', 'JURASSIC BACK', 'MAGIC SYSTEM', 'MELI MELO', 'NULL.REF', 'PIXELS', 'LACE'];
 const LIVE_AREA_TOKEN = 'bugsacorrigerlive';
@@ -117,12 +118,36 @@ function isTargetSprint(sprintName: string | null): boolean {
   return token !== null && /PI\d+-SP[1-4]$/i.test(token);
 }
 
-function inferCurrentSprintName(bugs: TeamBacklogBug[]): string | null {
+function sprintFromCalendarLabels(piLabel: string, sprintLabel: string): string | null {
+  const piName = extractPiName(piLabel);
+  const sprintMatch = sprintLabel.match(/SP\d+/i);
+  if (!piName || !sprintMatch) return null;
+  return `${piName}-${sprintMatch[0].toUpperCase()}`;
+}
+
+function inferCurrentSprintFromCalendar(db: Database.Database, snapshotDate: string): string | null {
+  const { entries } = getSprintCalendarSettings(db);
+  const current = entries
+    .filter((entry) => entry.active && entry.startDate <= snapshotDate && entry.endDate >= snapshotDate)
+    .sort((a, b) => b.startDate.localeCompare(a.startDate) || b.sortOrder - a.sortOrder)[0];
+
+  if (!current) return null;
+  return sprintFromCalendarLabels(current.piLabel, current.sprintLabel);
+}
+
+function inferCurrentSprintName(db: Database.Database, snapshotDate: string, bugs: TeamBacklogBug[]): string | null {
+  // Preferred source: configured sprint calendar (deterministic and date-based).
+  const calendarSprint = inferCurrentSprintFromCalendar(db, snapshotDate);
+  if (calendarSprint) return calendarSprint;
+
+  // Fallback: infer from cached bugs, but keep only explicit PIx-SPy tokens.
   const counts = new Map<string, number>();
   for (const bug of bugs) {
     const sprint = (bug.sprint ?? '').trim();
     if (!sprint || sprint === '-' || /archive/i.test(sprint)) continue;
-    counts.set(sprint, (counts.get(sprint) ?? 0) + 1);
+    const token = extractSprintToken(sprint);
+    if (!token) continue;
+    counts.set(token, (counts.get(token) ?? 0) + 1);
   }
   if (counts.size === 0) return null;
 
@@ -166,7 +191,7 @@ export function captureKpiTeamBacklogSnapshotIfDue(trigger: KpiHistoryTrigger): 
   const snapshotDate = parisDateIso();
 
   const backlog = teamBacklogs(db);
-  const sprintName = inferCurrentSprintName(backlog.bugs);
+  const sprintName = inferCurrentSprintName(db, snapshotDate, backlog.bugs);
   const liveAreaBugs = countLiveAreaOpenBugs(db);
 
   if (!sprintName) {

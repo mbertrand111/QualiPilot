@@ -140,7 +140,11 @@ export function getDb(): Database.Database {
   _db = new Database(config.databasePath);
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
-  _db.function('classify_bug', (vs: string | null, fi: string | null): string => classifyBug(vs, fi));
+  _db.function(
+    'classify_bug',
+    { varargs: true },
+    (vs: string | null, fi: string | null, ib?: string | null, ro?: string | null, ti?: string | null): string => classifyBug(vs, fi, ib, ro, ti),
+  );
 
   const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
   _db.exec(schema);

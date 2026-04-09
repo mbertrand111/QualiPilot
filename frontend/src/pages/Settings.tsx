@@ -62,6 +62,10 @@ interface ConformityRuleSettingsResponse {
   updatedAt: string;
 }
 
+interface HealthResponse {
+  status?: string;
+}
+
 interface SprintPiGroup {
   piLabel: string;
   piOrder: number;
@@ -122,6 +126,8 @@ export default function Settings() {
   const [loadingConformityRules, setLoadingConformityRules] = useState(true);
   const [conformityRulesError, setConformityRulesError] = useState<string | null>(null);
   const [savingRuleCode, setSavingRuleCode] = useState<string | null>(null);
+  const [connectionState, setConnectionState] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const loadReleaseVersions = useCallback(async () => {
     setLoadingReleaseVersions(true);
@@ -182,10 +188,55 @@ export default function Settings() {
     loadConformityRules();
   }, [loadConformityRules]);
 
+  const checkBackendConnection = useCallback(async () => {
+    try {
+      const res = await fetch('/api/health', { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as HealthResponse;
+      if (data?.status !== 'ok') throw new Error('Réponse inattendue');
+      setConnectionState('connected');
+      setConnectionError(null);
+    } catch (e) {
+      setConnectionState('disconnected');
+      setConnectionError(e instanceof Error ? e.message : 'Erreur inconnue');
+    }
+  }, []);
+
+  useEffect(() => {
+    setConnectionState('checking');
+    void checkBackendConnection();
+    const intervalId = setInterval(() => {
+      void checkBackendConnection();
+    }, 15000);
+    return () => clearInterval(intervalId);
+  }, [checkBackendConnection]);
+
   const selectedReleaseVersions = useMemo(
     () => releaseVersions.filter((v) => v.selected).map((v) => v.version),
     [releaseVersions],
   );
+
+  const connectionLabel = connectionState === 'connected'
+    ? 'Connecté'
+    : connectionState === 'checking'
+      ? 'Vérification...'
+      : 'Déconnecté';
+
+  const connectionBadgeClass = connectionState === 'connected'
+    ? 'border-green-100 bg-green-50 text-green-700'
+    : connectionState === 'checking'
+      ? 'border-amber-100 bg-amber-50 text-amber-700'
+      : 'border-red-100 bg-red-50 text-red-700';
+
+  const connectionDotClass = connectionState === 'connected'
+    ? 'bg-green-500'
+    : connectionState === 'checking'
+      ? 'bg-amber-500'
+      : 'bg-red-500';
+
+  const connectionPingClass = connectionState === 'connected'
+    ? 'bg-green-400'
+    : 'bg-amber-400';
 
   const sprintCalendarGroups = useMemo<SprintExerciseGroup[]>(() => {
     const sortedRows = [...sprintCalendarRows].sort((a, b) => {
@@ -371,7 +422,7 @@ export default function Settings() {
     clearResult: clearSyncResult,
     clearError: clearSyncError,
   } = useSyncAndEvaluate(async () => {
-    await Promise.all([loadReleaseVersions(), loadSprintCalendar(), loadConformityRules()]);
+    await Promise.all([loadReleaseVersions(), loadSprintCalendar(), loadConformityRules(), checkBackendConnection()]);
   });
 
   return (
@@ -406,14 +457,21 @@ export default function Settings() {
                   <div className="text-sm font-semibold text-gray-700">Statut de la connexion</div>
                   <div className="mt-0.5 text-xs text-gray-400">Authentification PAT - backend uniquement</div>
                 </div>
-                <div className="flex items-center gap-2 rounded-full border border-green-100 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">
+                <div className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${connectionBadgeClass}`}>
                   <span className="relative flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-60" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
+                    {connectionState !== 'disconnected' && (
+                      <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${connectionPingClass}`} />
+                    )}
+                    <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${connectionDotClass}`} />
                   </span>
-                  Connecté
+                  {connectionLabel}
                 </div>
               </div>
+              {connectionError && (
+                <div className="pt-2 text-xs text-red-500">
+                  Backend non joignable : {connectionError}
+                </div>
+              )}
 
               {ADO_CONFIG.map(({ label, value, env }) => (
                 <div key={label} className="flex items-center justify-between py-3.5">

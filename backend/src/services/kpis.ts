@@ -16,6 +16,7 @@ type BugRow = {
   changed_date: string | null;
   version_souhaitee: string | null;
   found_in: string | null;
+  integration_build: string | null;
 };
 
 type DefectDebtRow = {
@@ -26,12 +27,16 @@ type DefectDebtRow = {
   hors: number;
   openedGlobal: number;
   closedGlobal: number;
+  correctedSamePiGlobal: number;
   openedLive: number;
   closedLive: number;
+  correctedSamePiLive: number;
   openedOnpremise: number;
   closedOnpremise: number;
+  correctedSamePiOnpremise: number;
   openedHors: number;
   closedHors: number;
+  correctedSamePiHors: number;
   endGlobal: number;
   endLive: number;
   endOnpremise: number;
@@ -63,6 +68,38 @@ type PointBug = {
 type PointBacklogResult = {
   products: Array<{ value: ReleaseProduct; label: string }>;
   bugs: PointBug[];
+};
+
+export type PiFollowupWindow = {
+  label: string;
+  start: string;
+  end: string;
+  started: boolean;
+  completed: boolean;
+};
+
+export type PiFollowupBug = {
+  id: number;
+  title: string;
+  state: string;
+  team: string;
+  sprint: string;
+  version: string;
+  majorVersion: string;
+  patch: string | null;
+  product: ReleaseProduct;
+  createdDate: string | null;
+  resolvedDate: string | null;
+  closedDate: string | null;
+  createdPi: string | null;
+  resolvedPi: string | null;
+  closedPi: string | null;
+};
+
+export type PiFollowupResult = {
+  piWindows: PiFollowupWindow[];
+  defaultPi: string;
+  bugs: PiFollowupBug[];
 };
 
 type ClosedByPiResult = {
@@ -123,6 +160,62 @@ export type TeamBacklogBug = {
 export type TeamBacklogsResult = {
   teams: TeamBacklog[];
   bugs: TeamBacklogBug[];
+};
+
+type RetentionSegmentType = 'filiere' | 'product';
+
+type RetentionSegmentKey = 'GC' | 'CO' | 'IW' | 'live' | 'onpremise' | 'hors_version' | 'uncategorized';
+
+export type RetentionBucket = {
+  bucket: string;
+  count: number;
+};
+
+export type RetentionSegment = {
+  key: RetentionSegmentKey;
+  label: string;
+  total: number;
+  openCount: number;
+  closedCount: number;
+  avgOpenAgeDays: number;
+  medianOpenAgeDays: number;
+  medianCloseDays: number;
+  p90CloseDays: number;
+  over60OpenRate: number;
+  over90OpenRate: number;
+};
+
+export type RetentionDistribution = {
+  segmentType: RetentionSegmentType;
+  segmentKey: RetentionSegmentKey;
+  segmentLabel: string;
+  buckets: RetentionBucket[];
+};
+
+export type RetentionSummary = {
+  totalBugs: number;
+  openCount: number;
+  closedCount: number;
+  medianCloseDays: number;
+  medianOpenAgeDays: number;
+  over60OpenRate: number;
+  over90OpenRate: number;
+};
+
+export type RetentionPeriod = {
+  exercise: string;
+  label: string;
+  start: string;
+  end: string;
+};
+
+export type RetentionKpisResult = {
+  asOfDate: string;
+  period: RetentionPeriod;
+  summary: RetentionSummary;
+  filiere: RetentionSegment[];
+  product: RetentionSegment[];
+  distributions: RetentionDistribution[];
 };
 
 const TEAM_LIST = ['COCO', 'GO FAHST', 'JURASSIC BACK', 'MAGIC SYSTEM', 'MELI MELO', 'NULL.REF', 'PIXELS', 'LACE'];
@@ -188,8 +281,14 @@ function splitMajorAndPatch(normalizedVersion: string): { majorVersion: string; 
   return { majorVersion, patch: `${majorVersion} ${patchTail}` };
 }
 
-function releaseProduct(versionSouhaitee: string | null, foundIn: string | null): ReleaseProduct {
-  const bugType = classifyBug(versionSouhaitee, foundIn);
+function releaseProduct(
+  versionSouhaitee: string | null,
+  foundIn: string | null,
+  integrationBuild: string | null,
+  raisonOrigine: string | null,
+  title: string | null,
+): ReleaseProduct {
+  const bugType = classifyBug(versionSouhaitee, foundIn, integrationBuild, raisonOrigine, title);
   if (bugType === 'live' || bugType === 'onpremise' || bugType === 'hors_version') return bugType;
   return 'uncategorized';
 }
@@ -284,13 +383,50 @@ function mapDateToPiLabel(ms: number, windows: PiWindow[]): string | null {
   return null;
 }
 
+function toPiFollowupWindows(windows: PiWindow[], nowMs: number): PiFollowupWindow[] {
+  return windows.map((window) => {
+    const startMs = startOfDayMs(window.start);
+    const endMs = endOfDayMs(window.end);
+    return {
+      label: window.label,
+      start: window.start,
+      end: window.end,
+      started: startMs <= nowMs,
+      completed: endMs < nowMs,
+    };
+  });
+}
+
+function defaultPiLabel(piWindows: PiFollowupWindow[]): string {
+  const started = piWindows.filter((window) => window.started);
+  if (started.length > 0) return started[started.length - 1].label;
+  if (piWindows.length > 0) return piWindows[0].label;
+  return '';
+}
+
+function normalizedState(state: string | null): string {
+  return (state ?? '').trim().toLowerCase();
+}
+
+function effectiveResolvedDate(bug: BugRow): string | null {
+  if (bug.resolved_date) return bug.resolved_date;
+  if (normalizedState(bug.state) === 'resolved') return bug.changed_date;
+  return null;
+}
+
+function effectiveClosedDate(bug: BugRow): string | null {
+  if (bug.closed_date) return bug.closed_date;
+  if (normalizedState(bug.state) === 'closed') return bug.changed_date;
+  return null;
+}
+
 function loadRows(db: Database.Database): BugRow[] {
   return db.prepare(`
     SELECT
       id, title, state, team, sprint,
       raison_origine,
       created_date, resolved_date, closed_date, changed_date,
-      version_souhaitee, found_in
+      version_souhaitee, found_in, integration_build
     FROM bugs_cache
   `).all() as BugRow[];
 }
@@ -298,6 +434,178 @@ function loadRows(db: Database.Database): BugRow[] {
 function activePiWindows(db: Database.Database): PiWindow[] {
   const now = Date.now();
   return getConfiguredPiWindows(db).filter((w) => startOfDayMs(w.start) <= now);
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const RETENTION_FILIERES: Array<{ key: RetentionSegmentKey; label: string }> = [
+  { key: 'GC', label: 'GC' },
+  { key: 'CO', label: 'CO' },
+  { key: 'IW', label: 'IW' },
+];
+const RETENTION_PRODUCTS: Array<{ key: RetentionSegmentKey; label: string }> = [
+  { key: 'live', label: 'Live' },
+  { key: 'onpremise', label: 'OnPrem' },
+  { key: 'hors_version', label: 'Hors version' },
+  { key: 'uncategorized', label: 'Non classe' },
+];
+const RETENTION_BUCKETS: Array<{ label: string; min: number; max: number | null }> = [
+  { label: '0-7j', min: 0, max: 7 },
+  { label: '8-14j', min: 8, max: 14 },
+  { label: '15-30j', min: 15, max: 30 },
+  { label: '31-60j', min: 31, max: 60 },
+  { label: '61-90j', min: 61, max: 90 },
+  { label: '>90j', min: 91, max: null },
+];
+
+type RetentionAccumulator = {
+  total: number;
+  openAges: number[];
+  closeDurations: number[];
+};
+
+function createRetentionAccumulator(): RetentionAccumulator {
+  return { total: 0, openAges: [], closeDurations: [] };
+}
+
+function toDays(deltaMs: number): number {
+  return Math.max(0, deltaMs / DAY_MS);
+}
+
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function quantile(values: number[], q: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  if (sorted.length === 1) return round1(sorted[0]);
+  const pos = (sorted.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  const lower = sorted[base] ?? sorted[0];
+  const upper = sorted[base + 1] ?? lower;
+  return round1(lower + ((upper - lower) * rest));
+}
+
+function percentage(numerator: number, denominator: number): number {
+  if (denominator <= 0) return 0;
+  return round1((numerator / denominator) * 100);
+}
+
+function summarizeRetentionSegment(
+  key: RetentionSegmentKey,
+  label: string,
+  acc: RetentionAccumulator,
+): RetentionSegment {
+  const openCount = acc.openAges.length;
+  const closedCount = acc.closeDurations.length;
+  const avgOpenAgeDays = openCount > 0
+    ? round1(acc.openAges.reduce((sum, value) => sum + value, 0) / openCount)
+    : 0;
+  const medianOpenAgeDays = quantile(acc.openAges, 0.5);
+  const medianCloseDays = quantile(acc.closeDurations, 0.5);
+  const p90CloseDays = quantile(acc.closeDurations, 0.9);
+  const over60OpenRate = percentage(acc.openAges.filter((v) => v >= 60).length, openCount);
+  const over90OpenRate = percentage(acc.openAges.filter((v) => v >= 90).length, openCount);
+
+  return {
+    key,
+    label,
+    total: acc.total,
+    openCount,
+    closedCount,
+    avgOpenAgeDays,
+    medianOpenAgeDays,
+    medianCloseDays,
+    p90CloseDays,
+    over60OpenRate,
+    over90OpenRate,
+  };
+}
+
+function toRetentionBuckets(openAges: number[]): RetentionBucket[] {
+  return RETENTION_BUCKETS.map((bucket) => {
+    const count = openAges.filter((days) => {
+      const atLeastMin = days >= bucket.min;
+      const belowMax = bucket.max === null ? true : days <= bucket.max;
+      return atLeastMin && belowMax;
+    }).length;
+    return { bucket: bucket.label, count };
+  });
+}
+
+function retentionAccumulatorRecord(
+  entries: Array<{ key: RetentionSegmentKey }>,
+): Record<RetentionSegmentKey, RetentionAccumulator> {
+  const out = {} as Record<RetentionSegmentKey, RetentionAccumulator>;
+  for (const entry of entries) out[entry.key] = createRetentionAccumulator();
+  return out;
+}
+
+function pushRetentionValues(
+  acc: RetentionAccumulator,
+  createdMs: number | null,
+  closeMs: number | null,
+  nowMs: number,
+  periodStartMs: number,
+): void {
+  if (createdMs === null || createdMs > nowMs) return;
+  const isOpenNow = closeMs === null || closeMs > nowMs;
+  const isClosedInPeriod = closeMs !== null
+    && closeMs >= createdMs
+    && closeMs >= periodStartMs
+    && closeMs <= nowMs;
+  if (!isOpenNow && !isClosedInPeriod) return;
+  acc.total += 1;
+  if (isClosedInPeriod && closeMs !== null) {
+    acc.closeDurations.push(toDays(closeMs - createdMs));
+  }
+  if (isOpenNow) {
+    acc.openAges.push(toDays(nowMs - createdMs));
+  }
+}
+
+function currentExercisePeriod(db: Database.Database, nowMs: number): RetentionPeriod {
+  const windows = getConfiguredPiWindows(db);
+  const toExercise = (label: string): string | null => {
+    const match = label.match(/^(\d{2}-\d{2})\s+PI\d+$/i);
+    return match?.[1] ?? null;
+  };
+
+  const inWindow = windows.find((w) => {
+    const start = startOfDayMs(w.start);
+    const end = endOfDayMs(w.end);
+    return nowMs >= start && nowMs <= end;
+  });
+
+  const latestStarted = [...windows]
+    .filter((w) => startOfDayMs(w.start) <= nowMs)
+    .sort((a, b) => startOfDayMs(b.start) - startOfDayMs(a.start))[0];
+  const anchor = inWindow ?? latestStarted ?? windows[windows.length - 1];
+  const exercise = anchor ? (toExercise(anchor.label) ?? 'Exercice courant') : 'Exercice courant';
+
+  const exerciseWindows = windows.filter((w) => (toExercise(w.label) ?? '') === exercise);
+  if (exerciseWindows.length === 0) {
+    const today = toIsoDateFromMs(nowMs);
+    return {
+      exercise,
+      label: exercise,
+      start: today,
+      end: today,
+    };
+  }
+
+  const start = exerciseWindows
+    .map((w) => w.start)
+    .reduce((min, date) => (date < min ? date : min), exerciseWindows[0].start);
+  const end = toIsoDateFromMs(nowMs);
+
+  return {
+    exercise,
+    label: `Exercice ${exercise}`,
+    start,
+    end,
+  };
 }
 
 export function defectDebtByPi(db: Database.Database): DefectDebtRow[] {
@@ -318,29 +626,49 @@ export function defectDebtByPi(db: Database.Database): DefectDebtRow[] {
     let closedOnPrem = 0;
     let closedHors = 0;
 
+    let correctedSamePiGlobal = 0;
+    let correctedSamePiLive = 0;
+    let correctedSamePiOnPrem = 0;
+    let correctedSamePiHors = 0;
+
     let endGlobal = 0;
     let endLive = 0;
     let endOnPrem = 0;
     let endHors = 0;
 
     for (const row of rows) {
-      const bugType = classifyBug(row.version_souhaitee, row.found_in);
+      const bugType = classifyBug(
+        row.version_souhaitee,
+        row.found_in,
+        row.integration_build,
+        row.raison_origine,
+        row.title,
+      );
       const createdMs = toDateMs(row.created_date);
       const closeMs = closureDateMs(row);
       const closedState = row.state === 'Closed' || row.state === 'Resolved';
+      const createdInPi = createdMs !== null && createdMs >= startMs && createdMs <= endMs;
+      const closedInPi = closedState && closeMs !== null && closeMs >= startMs && closeMs <= endMs;
 
-      if (createdMs !== null && createdMs >= startMs && createdMs <= endMs) {
+      if (createdInPi) {
         createdGlobal += 1;
         if (bugType === 'live') createdLive += 1;
         if (bugType === 'onpremise') createdOnPrem += 1;
         if (bugType === 'hors_version') createdHors += 1;
       }
 
-      if (closedState && closeMs !== null && closeMs >= startMs && closeMs <= endMs) {
+      if (closedInPi) {
         closedGlobal += 1;
         if (bugType === 'live') closedLive += 1;
         if (bugType === 'onpremise') closedOnPrem += 1;
         if (bugType === 'hors_version') closedHors += 1;
+      }
+
+      if (createdInPi && closedInPi) {
+        correctedSamePiGlobal += 1;
+        if (bugType === 'live') correctedSamePiLive += 1;
+        if (bugType === 'onpremise') correctedSamePiOnPrem += 1;
+        if (bugType === 'hors_version') correctedSamePiHors += 1;
       }
 
       if (isOpenAtMs(row, endMs)) {
@@ -359,12 +687,16 @@ export function defectDebtByPi(db: Database.Database): DefectDebtRow[] {
       hors: createdHors - closedHors,
       openedGlobal: createdGlobal,
       closedGlobal,
+      correctedSamePiGlobal,
       openedLive: createdLive,
       closedLive,
+      correctedSamePiLive,
       openedOnpremise: createdOnPrem,
       closedOnpremise: closedOnPrem,
+      correctedSamePiOnpremise: correctedSamePiOnPrem,
       openedHors: createdHors,
       closedHors,
+      correctedSamePiHors,
       endGlobal,
       endLive,
       endOnpremise: endOnPrem,
@@ -398,7 +730,13 @@ export function backlogEvolution(
     for (const row of rows) {
       if (!isOpenAtMs(row, snapshotMs)) continue;
       total += 1;
-      const bugType = classifyBug(row.version_souhaitee, row.found_in);
+      const bugType = classifyBug(
+        row.version_souhaitee,
+        row.found_in,
+        row.integration_build,
+        row.raison_origine,
+        row.title,
+      );
       if (bugType === 'live') live += 1;
       else if (bugType === 'onpremise') onpremise += 1;
       else if (bugType === 'hors_version') hors += 1;
@@ -450,7 +788,13 @@ export function pointBacklog(db: Database.Database): PointBacklogResult {
     const sprint = row.sprint?.trim() || '-';
     const version = normalizeVersion(row.version_souhaitee);
     const { majorVersion, patch } = splitMajorAndPatch(version);
-    const product = releaseProduct(row.version_souhaitee, row.found_in);
+    const product = releaseProduct(
+      row.version_souhaitee,
+      row.found_in,
+      row.integration_build,
+      row.raison_origine,
+      row.title,
+    );
 
     bugs.push({
       id: row.id,
@@ -473,6 +817,67 @@ export function pointBacklog(db: Database.Database): PointBacklogResult {
       { value: 'onpremise', label: 'On prem' },
       { value: 'hors_version', label: 'Hors version' },
     ],
+    bugs,
+  };
+}
+
+export function piFollowup(db: Database.Database): PiFollowupResult {
+  const rows = loadRows(db);
+  const nowMs = Date.now();
+  const windows = getConfiguredPiWindows(db);
+  const piWindows = toPiFollowupWindows(windows, nowMs);
+  const bugs: PiFollowupBug[] = [];
+
+  for (const row of rows) {
+    const state = (row.state ?? 'Unknown').trim() || 'Unknown';
+    const team = normalizeTeam(row.team);
+    const sprint = row.sprint?.trim() || '-';
+    const version = normalizeVersion(row.version_souhaitee);
+    const { majorVersion, patch } = splitMajorAndPatch(version);
+    const product = releaseProduct(
+      row.version_souhaitee,
+      row.found_in,
+      row.integration_build,
+      row.raison_origine,
+      row.title,
+    );
+
+    const createdDate = row.created_date;
+    const resolvedDate = effectiveResolvedDate(row);
+    const closedDate = effectiveClosedDate(row);
+
+    const createdMs = toDateMs(createdDate);
+    const resolvedMs = toDateMs(resolvedDate);
+    const closedMs = toDateMs(closedDate);
+
+    const createdPi = createdMs === null ? null : mapDateToPiLabel(createdMs, windows);
+    const resolvedPi = resolvedMs === null ? null : mapDateToPiLabel(resolvedMs, windows);
+    const closedPi = closedMs === null ? null : mapDateToPiLabel(closedMs, windows);
+
+    bugs.push({
+      id: row.id,
+      title: row.title?.trim() || '(sans titre)',
+      state,
+      team,
+      sprint,
+      version,
+      majorVersion,
+      patch,
+      product,
+      createdDate,
+      resolvedDate,
+      closedDate,
+      createdPi,
+      resolvedPi,
+      closedPi,
+    });
+  }
+
+  bugs.sort((a, b) => a.id - b.id);
+
+  return {
+    piWindows,
+    defaultPi: defaultPiLabel(piWindows),
     bugs,
   };
 }
@@ -735,5 +1140,71 @@ export function teamBacklogs(db: Database.Database): TeamBacklogsResult {
   return {
     teams: TEAM_LIST.map((team) => acc.get(team) as TeamBacklog),
     bugs,
+  };
+}
+
+export function retentionKpis(db: Database.Database): RetentionKpisResult {
+  const rows = loadRows(db);
+  const nowMs = Date.now();
+  const period = currentExercisePeriod(db, nowMs);
+  const periodStartMs = startOfDayMs(period.start);
+  const filiereAcc = retentionAccumulatorRecord(RETENTION_FILIERES);
+  const productAcc = retentionAccumulatorRecord(RETENTION_PRODUCTS);
+  const globalAcc = createRetentionAccumulator();
+
+  for (const row of rows) {
+    const filiere = classifyFiliere(row.title);
+    const product = releaseProduct(
+      row.version_souhaitee,
+      row.found_in,
+      row.integration_build,
+      row.raison_origine,
+      row.title,
+    );
+    const createdMs = toDateMs(row.created_date);
+    const isClosed = row.state === 'Closed' || row.state === 'Resolved';
+    const closeMs = isClosed
+      ? (closureDateMs(row) ?? toDateMs(row.changed_date))
+      : null;
+
+    pushRetentionValues(globalAcc, createdMs, closeMs, nowMs, periodStartMs);
+    pushRetentionValues(filiereAcc[filiere], createdMs, closeMs, nowMs, periodStartMs);
+    pushRetentionValues(productAcc[product], createdMs, closeMs, nowMs, periodStartMs);
+  }
+
+  const filiere = RETENTION_FILIERES.map(({ key, label }) => summarizeRetentionSegment(key, label, filiereAcc[key]));
+  const product = RETENTION_PRODUCTS.map(({ key, label }) => summarizeRetentionSegment(key, label, productAcc[key]));
+
+  const distributions: RetentionDistribution[] = [
+    ...RETENTION_FILIERES.map(({ key, label }) => ({
+      segmentType: 'filiere' as const,
+      segmentKey: key,
+      segmentLabel: label,
+      buckets: toRetentionBuckets(filiereAcc[key].openAges),
+    })),
+    ...RETENTION_PRODUCTS.map(({ key, label }) => ({
+      segmentType: 'product' as const,
+      segmentKey: key,
+      segmentLabel: label,
+      buckets: toRetentionBuckets(productAcc[key].openAges),
+    })),
+  ];
+
+  const summarySegment = summarizeRetentionSegment('GC', 'Global', globalAcc);
+  return {
+    asOfDate: toIsoDateFromMs(nowMs),
+    period,
+    summary: {
+      totalBugs: summarySegment.total,
+      openCount: summarySegment.openCount,
+      closedCount: summarySegment.closedCount,
+      medianCloseDays: summarySegment.medianCloseDays,
+      medianOpenAgeDays: summarySegment.medianOpenAgeDays,
+      over60OpenRate: summarySegment.over60OpenRate,
+      over90OpenRate: summarySegment.over90OpenRate,
+    },
+    filiere,
+    product,
+    distributions,
   };
 }

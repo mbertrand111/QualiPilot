@@ -14,10 +14,12 @@ import {
 const TABS = [
   { key: 'defect-debt',    label: 'Defect Debt'         },
   { key: 'backlog-evo',   label: 'Evolution backlog' },
-  { key: 'terrain-returns', label: 'Retours terrain' },
   { key: 'suivi-release',  label: 'Suivi par release'    },
+  { key: 'suivi-pi',      label: 'Suivi par PI' },
   { key: 'closed-by-pi',  label: 'Bugs fermes par PI' },
   { key: 'team-backlogs', label: 'Backlogs équipes' },
+  { key: 'retention', label: 'Rétention bugs' },
+  { key: 'terrain-returns', label: 'Retours terrain' },
 ] as const;
 type TabKey = typeof TABS[number]['key'];
 
@@ -55,31 +57,44 @@ interface DefectDebtPiRow {
   hors: number;
   openedGlobal: number;
   closedGlobal: number;
+  correctedSamePiGlobal: number;
   openedLive: number;
   closedLive: number;
+  correctedSamePiLive: number;
   openedOnpremise: number;
   closedOnpremise: number;
+  correctedSamePiOnpremise: number;
   openedHors: number;
   closedHors: number;
+  correctedSamePiHors: number;
   endGlobal: number;
   endLive: number;
   endOnpremise: number;
   endHors: number;
 }
 
+interface BacklogEvolutionPoint {
+  date: string;
+  label?: string;
+  total: number;
+  live: number;
+  onpremise: number;
+  hors: number;
+}
+
 // Tab 1 â€” Defect Debt (crees - fermes par PI)
 const DD_RAW: DefectDebtPiRow[] = [
-  { pi: '24-25 PI4', global:  120, live:  55, onpremise: -10, hors:   2, openedGlobal: 390, closedGlobal: 270, openedLive: 180, closedLive: 125, openedOnpremise: 90, closedOnpremise: 100, openedHors: 18, closedHors: 16, endGlobal: 340, endLive:  85, endOnpremise: 230, endHors: 25 },
-  { pi: '24-25 PI5', global: -180, live: -45, onpremise:  -8, hors:  -3, openedGlobal: 260, closedGlobal: 440, openedLive: 90, closedLive: 135, openedOnpremise: 84, closedOnpremise: 92, openedHors: 20, closedHors: 23, endGlobal: 295, endLive:  65, endOnpremise: 210, endHors: 20 },
-  { pi: '24-25 PI6', global: -290, live: -80, onpremise:   5, hors:   5, openedGlobal: 210, closedGlobal: 500, openedLive: 60, closedLive: 140, openedOnpremise: 98, closedOnpremise: 93, openedHors: 22, closedHors: 17, endGlobal: 420, endLive: 120, endOnpremise: 270, endHors: 30 },
-  { pi: '25-26 PI1', global:  180, live:  60, onpremise:  35, hors:   4, openedGlobal: 430, closedGlobal: 250, openedLive: 210, closedLive: 150, openedOnpremise: 130, closedOnpremise: 95, openedHors: 24, closedHors: 20, endGlobal: 265, endLive: 100, endOnpremise: 140, endHors: 25 },
-  { pi: '25-26 PI2', global: -160, live: -75, onpremise: -22, hors:  -5, openedGlobal: 255, closedGlobal: 415, openedLive: 95, closedLive: 170, openedOnpremise: 75, closedOnpremise: 97, openedHors: 18, closedHors: 23, endGlobal: 220, endLive:  95, endOnpremise: 108, endHors: 17 },
-  { pi: '25-26 PI3', global:   35, live:  12, onpremise:   8, hors:   1, openedGlobal: 286, closedGlobal: 251, openedLive: 132, closedLive: 120, openedOnpremise: 92, closedOnpremise: 84, openedHors: 17, closedHors: 16, endGlobal: 247, endLive: 107, endOnpremise: 122, endHors: 18 },
-  { pi: '25-26 PI4', global:   48, live:  18, onpremise:  10, hors:   2, openedGlobal: 300, closedGlobal: 252, openedLive: 138, closedLive: 120, openedOnpremise: 94, closedOnpremise: 84, openedHors: 19, closedHors: 17, endGlobal: 252, endLive: 110, endOnpremise: 124, endHors: 18 },
+  { pi: '24-25 PI4', global:  120, live:  55, onpremise: -10, hors:   2, openedGlobal: 390, closedGlobal: 270, correctedSamePiGlobal: 210, openedLive: 180, closedLive: 125, correctedSamePiLive: 98, openedOnpremise: 90, closedOnpremise: 100, correctedSamePiOnpremise: 70, openedHors: 18, closedHors: 16, correctedSamePiHors: 9, endGlobal: 340, endLive:  85, endOnpremise: 230, endHors: 25 },
+  { pi: '24-25 PI5', global: -180, live: -45, onpremise:  -8, hors:  -3, openedGlobal: 260, closedGlobal: 440, correctedSamePiGlobal: 145, openedLive: 90, closedLive: 135, correctedSamePiLive: 49, openedOnpremise: 84, closedOnpremise: 92, correctedSamePiOnpremise: 52, openedHors: 20, closedHors: 23, correctedSamePiHors: 11, endGlobal: 295, endLive:  65, endOnpremise: 210, endHors: 20 },
+  { pi: '24-25 PI6', global: -290, live: -80, onpremise:   5, hors:   5, openedGlobal: 210, closedGlobal: 500, correctedSamePiGlobal: 118, openedLive: 60, closedLive: 140, correctedSamePiLive: 33, openedOnpremise: 98, closedOnpremise: 93, correctedSamePiOnpremise: 58, openedHors: 22, closedHors: 17, correctedSamePiHors: 13, endGlobal: 420, endLive: 120, endOnpremise: 270, endHors: 30 },
+  { pi: '25-26 PI1', global:  180, live:  60, onpremise:  35, hors:   4, openedGlobal: 430, closedGlobal: 250, correctedSamePiGlobal: 256, openedLive: 210, closedLive: 150, correctedSamePiLive: 124, openedOnpremise: 130, closedOnpremise: 95, correctedSamePiOnpremise: 82, openedHors: 24, closedHors: 20, correctedSamePiHors: 14, endGlobal: 265, endLive: 100, endOnpremise: 140, endHors: 25 },
+  { pi: '25-26 PI2', global: -160, live: -75, onpremise: -22, hors:  -5, openedGlobal: 255, closedGlobal: 415, correctedSamePiGlobal: 138, openedLive: 95, closedLive: 170, correctedSamePiLive: 54, openedOnpremise: 75, closedOnpremise: 97, correctedSamePiOnpremise: 43, openedHors: 18, closedHors: 23, correctedSamePiHors: 9, endGlobal: 220, endLive:  95, endOnpremise: 108, endHors: 17 },
+  { pi: '25-26 PI3', global:   35, live:  12, onpremise:   8, hors:   1, openedGlobal: 286, closedGlobal: 251, correctedSamePiGlobal: 170, openedLive: 132, closedLive: 120, correctedSamePiLive: 81, openedOnpremise: 92, closedOnpremise: 84, correctedSamePiOnpremise: 58, openedHors: 17, closedHors: 16, correctedSamePiHors: 10, endGlobal: 247, endLive: 107, endOnpremise: 122, endHors: 18 },
+  { pi: '25-26 PI4', global:   48, live:  18, onpremise:  10, hors:   2, openedGlobal: 300, closedGlobal: 252, correctedSamePiGlobal: 182, openedLive: 138, closedLive: 120, correctedSamePiLive: 84, openedOnpremise: 94, closedOnpremise: 84, correctedSamePiOnpremise: 60, openedHors: 19, closedHors: 17, correctedSamePiHors: 11, endGlobal: 252, endLive: 110, endOnpremise: 124, endHors: 18 },
 ];
 
 // Tab 2 â€” Backlog evolution (snapshots mensuels)
-const BACKLOG_EVO = [
+const BACKLOG_EVO: BacklogEvolutionPoint[] = [
   { date: '2025-04-01', label: 'Avr 25', total: 335, live: 62,  onpremise: 254, hors: 19 },
   { date: '2025-05-01', label: 'Mai 25', total: 340, live: 65,  onpremise: 256, hors: 19 },
   { date: '2025-06-01', label: 'Jun 25', total: 347, live: 68,  onpremise: 260, hors: 19 },
@@ -112,6 +127,31 @@ interface PointBacklogResponse {
   bugs: ReleaseBug[];
 }
 
+interface PiFollowupWindow {
+  label: string;
+  start: string;
+  end: string;
+  started: boolean;
+  completed: boolean;
+}
+
+interface PiFollowupBug extends ReleaseBug {
+  createdDate: string | null;
+  resolvedDate: string | null;
+  closedDate: string | null;
+  createdPi: string | null;
+  resolvedPi: string | null;
+  closedPi: string | null;
+}
+
+interface PiFollowupResponse {
+  piWindows: PiFollowupWindow[];
+  defaultPi: string;
+  bugs: PiFollowupBug[];
+}
+
+type PiEventKey = 'created' | 'closed';
+
 interface ReleaseVersionSettingsResponse {
   versions: Array<{ version: string; selected: boolean }>;
   alwaysVisible: string[];
@@ -121,6 +161,11 @@ interface PersistedReleaseFilters {
   products: ReleaseProduct[];
   versions: string[];
   patches: string[];
+}
+
+interface PersistedPiFollowupFilters extends PersistedReleaseFilters {
+  piLabel: string | null;
+  events: PiEventKey[];
 }
 
 const DEFAULT_RELEASE_STATES = ['New', 'Active', 'Resolved', 'Closed'] as const;
@@ -135,6 +180,20 @@ function majorVersionMatchesProduct(majorVersion: string, product: ReleaseProduc
 }
 
 const RELEASE_FILTERS_STORAGE_KEY = 'kpis.suiviRelease.filters.v1';
+const PI_FOLLOWUP_FILTERS_STORAGE_KEY = 'kpis.suiviPi.filters.v1';
+const PI_EVENTS: PiEventKey[] = ['created', 'closed'];
+const PI_EVENT_LABEL: Record<PiEventKey, string> = {
+  created: 'Créés',
+  closed: 'Fermés',
+};
+const PI_EVENT_COLORS: Record<PiEventKey, string> = {
+  created: '#1D4ED8',
+  closed: '#0EA5A3',
+};
+const PI_EVENT_BAR_COLORS: Record<PiEventKey, string> = {
+  created: '#B9D8FF',
+  closed: '#F8C3D7',
+};
 
 function loadPersistedReleaseFilters(): PersistedReleaseFilters {
   try {
@@ -155,6 +214,34 @@ function loadPersistedReleaseFilters(): PersistedReleaseFilters {
 function savePersistedReleaseFilters(filters: PersistedReleaseFilters): void {
   try {
     localStorage.setItem(RELEASE_FILTERS_STORAGE_KEY, JSON.stringify(filters));
+  } catch {
+    // no-op
+  }
+}
+
+function loadPersistedPiFollowupFilters(): PersistedPiFollowupFilters {
+  try {
+    const raw = localStorage.getItem(PI_FOLLOWUP_FILTERS_STORAGE_KEY);
+    if (!raw) return { piLabel: null, events: [...PI_EVENTS], products: [], versions: [], patches: [] };
+    const parsed = JSON.parse(raw) as Partial<PersistedPiFollowupFilters>;
+    const events = Array.isArray(parsed.events)
+      ? parsed.events.filter((e): e is PiEventKey => e === 'created' || e === 'closed')
+      : [];
+    return {
+      piLabel: typeof parsed.piLabel === 'string' ? parsed.piLabel : null,
+      events: events.length > 0 ? events : [...PI_EVENTS],
+      products: Array.isArray(parsed.products) ? parsed.products.filter((p): p is ReleaseProduct => typeof p === 'string') : [],
+      versions: Array.isArray(parsed.versions) ? parsed.versions.filter((v): v is string => typeof v === 'string') : [],
+      patches: Array.isArray(parsed.patches) ? parsed.patches.filter((v): v is string => typeof v === 'string') : [],
+    };
+  } catch {
+    return { piLabel: null, events: [...PI_EVENTS], products: [], versions: [], patches: [] };
+  }
+}
+
+function savePersistedPiFollowupFilters(filters: PersistedPiFollowupFilters): void {
+  try {
+    localStorage.setItem(PI_FOLLOWUP_FILTERS_STORAGE_KEY, JSON.stringify(filters));
   } catch {
     // no-op
   }
@@ -226,6 +313,55 @@ interface TeamBacklogsResponse {
 type TeamBacklogFiliereFilter = 'GC' | 'CO' | 'IW' | 'CO_IW' | null;
 type TeamBacklogSortKey = 'id' | 'title' | 'state' | 'version' | 'team' | 'filiere' | 'sprint' | 'createdDate' | 'changedDate';
 type TeamBacklogSortDir = 'asc' | 'desc';
+
+type RetentionSegmentType = 'filiere' | 'product';
+type RetentionSegmentKey = 'GC' | 'CO' | 'IW' | 'live' | 'onpremise' | 'hors_version' | 'uncategorized';
+interface RetentionBucket {
+  bucket: string;
+  count: number;
+}
+interface RetentionSegment {
+  key: RetentionSegmentKey;
+  label: string;
+  total: number;
+  openCount: number;
+  closedCount: number;
+  avgOpenAgeDays: number;
+  medianOpenAgeDays: number;
+  medianCloseDays: number;
+  p90CloseDays: number;
+  over60OpenRate: number;
+  over90OpenRate: number;
+}
+interface RetentionDistribution {
+  segmentType: RetentionSegmentType;
+  segmentKey: RetentionSegmentKey;
+  segmentLabel: string;
+  buckets: RetentionBucket[];
+}
+interface RetentionSummary {
+  totalBugs: number;
+  openCount: number;
+  closedCount: number;
+  medianCloseDays: number;
+  medianOpenAgeDays: number;
+  over60OpenRate: number;
+  over90OpenRate: number;
+}
+interface RetentionPeriod {
+  exercise: string;
+  label: string;
+  start: string;
+  end: string;
+}
+interface RetentionResponse {
+  asOfDate: string;
+  period: RetentionPeriod;
+  summary: RetentionSummary;
+  filiere: RetentionSegment[];
+  product: RetentionSegment[];
+  distributions: RetentionDistribution[];
+}
 const TEAM_BACKLOGS: TeamBacklog[] = [
   { team: 'COCO',          objective:  8, gcBugs:  7, newBugs:  5, activeBugs: 2, resolvedBugs: 0, coBugs: 1, iwBugs: 1, topVersions: [{ version: 'FAH_26.20', count: 4 }, { version: 'FAH_26.30', count: 2 }, { version: 'vide', count: 1 }] },
   { team: 'GO FAHST',      objective:  5, gcBugs:  6, newBugs:  4, activeBugs: 2, resolvedBugs: 0, coBugs: 2, iwBugs: 3, topVersions: [{ version: 'FAH_26.20', count: 3 }, { version: 'FAH_26.30', count: 2 }, { version: 'FAH_26.10', count: 1 }] },
@@ -254,7 +390,14 @@ const STATE_BADGE: Record<string, string> = {
 // â”€â”€â”€ Tab 1 : Defect Debt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface DebtRow { pi: string; debt: number; endBugs: number }
-interface DebtOpenClosedRow { pi: string; opened: number; closed: number }
+interface DebtOpenClosedRow {
+  pi: string;
+  opened: number;
+  closed: number;
+  correctedSamePi: number;
+  openedRemaining: number;
+  closedFromOutside: number;
+}
 
 function DebtChart({ title, data, integerYAxis = false }: { title: string; data: DebtRow[]; integerYAxis?: boolean }) {
   return (
@@ -299,8 +442,10 @@ function DebtOpenClosedChart({
           <XAxis dataKey="pi" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
           <YAxis allowDecimals={!integerYAxis} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
           <Tooltip contentStyle={ttStyle()} />
-          <Bar dataKey="opened" name="Bugs ouverts" maxBarSize={30} radius={[3, 3, 0, 0]} fill="#74B6FF" />
-          <Bar dataKey="closed" name="Bugs fermés" maxBarSize={30} radius={[3, 3, 0, 0]} fill="#F39FBE" />
+          <Bar dataKey="correctedSamePi" stackId="opened" name="Ouverts puis corriges sur ce meme PI" maxBarSize={30} radius={[3, 3, 0, 0]} fill="#5DA7F7" />
+          <Bar dataKey="openedRemaining" stackId="opened" name="Ouverts non corriges dans le PI" maxBarSize={30} radius={[3, 3, 0, 0]} fill="#B9D8FF" />
+          <Bar dataKey="correctedSamePi" stackId="closed" name="Fermes ouverts sur ce meme PI" maxBarSize={30} radius={[3, 3, 0, 0]} fill="#E783AD" />
+          <Bar dataKey="closedFromOutside" stackId="closed" name="Fermes issus d'ouvertures hors PI" maxBarSize={30} radius={[3, 3, 0, 0]} fill="#F8C3D7" />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -385,14 +530,57 @@ function DefectDebtTab({ refreshKey }: { refreshKey: number }) {
         Ouverts vs fermes par PI
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <DebtOpenClosedChart title="Global"            data={filtered.map(d => ({ pi: d.pi, opened: d.openedGlobal,    closed: d.closedGlobal    }))} />
-        <DebtOpenClosedChart title="Live (FAH)"        data={filtered.map(d => ({ pi: d.pi, opened: d.openedLive,      closed: d.closedLive      }))} />
-        <DebtOpenClosedChart title="OnPremise (13.8x)" data={filtered.map(d => ({ pi: d.pi, opened: d.openedOnpremise, closed: d.closedOnpremise }))} />
-        <DebtOpenClosedChart title="Hors version"      integerYAxis data={filtered.map(d => ({ pi: d.pi, opened: d.openedHors,      closed: d.closedHors      }))} />
+        <DebtOpenClosedChart
+          title="Global"
+          data={filtered.map((d) => ({
+            pi: d.pi,
+            opened: d.openedGlobal,
+            closed: d.closedGlobal,
+            correctedSamePi: d.correctedSamePiGlobal,
+            openedRemaining: Math.max(0, d.openedGlobal - d.correctedSamePiGlobal),
+            closedFromOutside: Math.max(0, d.closedGlobal - d.correctedSamePiGlobal),
+          }))}
+        />
+        <DebtOpenClosedChart
+          title="Live (FAH)"
+          data={filtered.map((d) => ({
+            pi: d.pi,
+            opened: d.openedLive,
+            closed: d.closedLive,
+            correctedSamePi: d.correctedSamePiLive,
+            openedRemaining: Math.max(0, d.openedLive - d.correctedSamePiLive),
+            closedFromOutside: Math.max(0, d.closedLive - d.correctedSamePiLive),
+          }))}
+        />
+        <DebtOpenClosedChart
+          title="OnPremise (13.8x)"
+          data={filtered.map((d) => ({
+            pi: d.pi,
+            opened: d.openedOnpremise,
+            closed: d.closedOnpremise,
+            correctedSamePi: d.correctedSamePiOnpremise,
+            openedRemaining: Math.max(0, d.openedOnpremise - d.correctedSamePiOnpremise),
+            closedFromOutside: Math.max(0, d.closedOnpremise - d.correctedSamePiOnpremise),
+          }))}
+        />
+        <DebtOpenClosedChart
+          title="Hors version"
+          integerYAxis
+          data={filtered.map((d) => ({
+            pi: d.pi,
+            opened: d.openedHors,
+            closed: d.closedHors,
+            correctedSamePi: d.correctedSamePiHors,
+            openedRemaining: Math.max(0, d.openedHors - d.correctedSamePiHors),
+            closedFromOutside: Math.max(0, d.closedHors - d.correctedSamePiHors),
+          }))}
+        />
       </div>
       <div className="flex items-center gap-5 mt-3 text-[11px] text-gray-400">
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#74B6FF]" /> Bugs ouverts (crees dans le PI)</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#F39FBE]" /> Bugs fermes (fermes/resolus dans le PI)</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#5DA7F7]" /> Ouverts puis corriges sur ce meme PI</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#B9D8FF]" /> Ouverts non corriges dans le PI</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#E783AD]" /> Fermes ouverts sur ce meme PI</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#F8C3D7]" /> Fermes issus d'ouvertures hors PI</span>
       </div>
     </div>
   );
@@ -1082,6 +1270,749 @@ function SuiviReleaseTab({ refreshKey }: { refreshKey: number }) {
             })}
             {filteredBugs.length === 0 && (
               <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-xs">Aucun bug pour ces filtres</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SuiviPiTab({ refreshKey }: { refreshKey: number }) {
+  const persisted = useMemo(() => loadPersistedPiFollowupFilters(), []);
+
+  const [allBugs, setAllBugs] = useState<PiFollowupBug[]>([]);
+  const [piWindows, setPiWindows] = useState<PiFollowupWindow[]>([]);
+  const [defaultPi, setDefaultPi] = useState('');
+  const [configuredMajorVersions, setConfiguredMajorVersions] = useState<string[]>([]);
+  const [alwaysVisibleVersions, setAlwaysVisibleVersions] = useState<string[]>(['vide', 'Non concerne']);
+
+  const [selectedPi, setSelectedPi] = useState<string>(persisted.piLabel ?? '');
+  const [selectedEvents, setSelectedEvents] = useState<PiEventKey[]>(persisted.events);
+  const [selectedProducts, setSelectedProducts] = useState<ReleaseProduct[]>(persisted.products);
+  const [selectedVersions, setSelectedVersions] = useState<string[]>(persisted.versions);
+  const [selectedPatches, setSelectedPatches] = useState<string[]>(persisted.patches);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [backlogSeries, setBacklogSeries] = useState<BacklogEvolutionPoint[]>([]);
+  const [backlogExcerptLoading, setBacklogExcerptLoading] = useState(true);
+  const [backlogExcerptError, setBacklogExcerptError] = useState<string | null>(null);
+
+  const productOptions = useMemo<Array<{ value: ReleaseProduct; label: string }>>(() => ([
+    { value: 'live', label: 'Live' },
+    { value: 'onpremise', label: 'On prem' },
+    { value: 'hors_version', label: 'Hors version' },
+    { value: 'uncategorized', label: 'Non classé' },
+  ]), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const [followupRes, settingsRes] = await Promise.all([
+          fetch('/api/kpis/pi-followup'),
+          fetch('/api/settings/release-versions'),
+        ]);
+        if (!followupRes.ok) throw new Error(`HTTP ${followupRes.status}`);
+        if (!settingsRes.ok) throw new Error(`HTTP ${settingsRes.status}`);
+
+        const followupPayload = await followupRes.json() as PiFollowupResponse;
+        const settingsPayload = await settingsRes.json() as ReleaseVersionSettingsResponse;
+        if (cancelled) return;
+
+        const windows = Array.isArray(followupPayload.piWindows) ? followupPayload.piWindows : [];
+        setPiWindows(windows);
+        setAllBugs(Array.isArray(followupPayload.bugs) ? followupPayload.bugs : []);
+        setDefaultPi(typeof followupPayload.defaultPi === 'string' ? followupPayload.defaultPi : '');
+        setConfiguredMajorVersions(
+          Array.isArray(settingsPayload.versions)
+            ? settingsPayload.versions.filter((v) => v.selected).map((v) => v.version)
+            : [],
+        );
+        setAlwaysVisibleVersions(
+          Array.isArray(settingsPayload.alwaysVisible) ? settingsPayload.alwaysVisible : ['vide', 'Non concerne'],
+        );
+
+        const available = new Set(windows.map((w) => w.label));
+        setSelectedPi((prev) => {
+          if (prev && available.has(prev)) return prev;
+          if (persisted.piLabel && available.has(persisted.piLabel)) return persisted.piLabel;
+          if (followupPayload.defaultPi && available.has(followupPayload.defaultPi)) return followupPayload.defaultPi;
+          return windows[0]?.label ?? '';
+        });
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Erreur inconnue');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [refreshKey, persisted.piLabel]);
+
+  const piLabels = useMemo(() => piWindows.map((window) => window.label), [piWindows]);
+
+  useEffect(() => {
+    setSelectedPi((prev) => {
+      if (prev && piLabels.includes(prev)) return prev;
+      if (defaultPi && piLabels.includes(defaultPi)) return defaultPi;
+      return piLabels[0] ?? '';
+    });
+  }, [defaultPi, piLabels]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadBacklogEvolution() {
+      setBacklogExcerptLoading(true);
+      setBacklogExcerptError(null);
+      try {
+        const res = await fetch('/api/kpis/backlog-evolution?months=120&granularity=day');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const payload = await res.json();
+        if (cancelled) return;
+        if (Array.isArray(payload)) {
+          const normalized = payload
+            .filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null)
+            .filter((row) => typeof row.date === 'string')
+            .map((row) => ({
+              date: String(row.date),
+              label: typeof row.label === 'string' ? row.label : undefined,
+              total: Number(row.total) || 0,
+              live: Number(row.live) || 0,
+              onpremise: Number(row.onpremise) || 0,
+              hors: Number(row.hors) || 0,
+            }))
+            .sort((a, b) => a.date.localeCompare(b.date));
+          setBacklogSeries(normalized);
+        } else {
+          setBacklogSeries([]);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setBacklogSeries([]);
+          setBacklogExcerptError(e instanceof Error ? e.message : 'Erreur inconnue');
+        }
+      } finally {
+        if (!cancelled) setBacklogExcerptLoading(false);
+      }
+    }
+    loadBacklogEvolution();
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
+  const hasPiEvent = (bug: PiFollowupBug, event: PiEventKey, piLabel: string): boolean => {
+    if (event === 'created') return bug.createdPi === piLabel;
+    return bug.closedPi === piLabel;
+  };
+
+  const piEventFilteredBugs = useMemo(() => {
+    if (!selectedPi || selectedEvents.length === 0) return [];
+    return allBugs.filter((bug) => selectedEvents.some((event) => hasPiEvent(bug, event, selectedPi)));
+  }, [allBugs, selectedPi, selectedEvents]);
+
+  const releaseFilteredByProduct = useMemo(() => {
+    if (selectedProducts.length === 0) return piEventFilteredBugs;
+    const selected = new Set(selectedProducts);
+    return piEventFilteredBugs.filter((bug) => selected.has(bug.product));
+  }, [piEventFilteredBugs, selectedProducts]);
+
+  const versionOptions = useMemo(() => {
+    const configuredSet = new Set(configuredMajorVersions);
+    const alwaysVisibleSet = new Set(alwaysVisibleVersions);
+    const selectedProductSet = new Set(selectedProducts);
+    const values = new Set<string>();
+
+    for (const bug of releaseFilteredByProduct) {
+      const major = bug.majorVersion;
+      const allowedByProduct = selectedProductSet.size === 0
+        || [...selectedProductSet].some((p) => majorVersionMatchesProduct(major, p));
+      if (alwaysVisibleSet.has(major) || (configuredSet.has(major) && allowedByProduct)) {
+        values.add(major);
+      }
+    }
+    for (const alwaysVisible of alwaysVisibleVersions) values.add(alwaysVisible);
+
+    return [...values].sort((a, b) => {
+      if (a === 'vide') return 1;
+      if (b === 'vide') return -1;
+      if (a === 'Non concerne') return 1;
+      if (b === 'Non concerne') return -1;
+      return a.localeCompare(b, 'fr', { numeric: true, sensitivity: 'base' });
+    });
+  }, [releaseFilteredByProduct, configuredMajorVersions, alwaysVisibleVersions, selectedProducts]);
+
+  const effectiveVersionSet = useMemo(
+    () => new Set(selectedVersions.length > 0 ? selectedVersions : versionOptions),
+    [selectedVersions, versionOptions],
+  );
+
+  const patchOptions = useMemo(() => {
+    const source = releaseFilteredByProduct.filter((bug) => effectiveVersionSet.has(bug.majorVersion));
+    return [...new Set(source.map((bug) => bug.patch).filter((patch): patch is string => Boolean(patch)))]
+      .sort((a, b) => a.localeCompare(b, 'fr', { numeric: true, sensitivity: 'base' }));
+  }, [releaseFilteredByProduct, effectiveVersionSet]);
+
+  useEffect(() => {
+    setSelectedProducts((prev) => prev.filter((p) => productOptions.some((opt) => opt.value === p)));
+  }, [productOptions]);
+
+  useEffect(() => {
+    setSelectedVersions((prev) => prev.filter((version) => versionOptions.includes(version)));
+  }, [versionOptions]);
+
+  useEffect(() => {
+    setSelectedPatches((prev) => prev.filter((patch) => patchOptions.includes(patch)));
+  }, [patchOptions]);
+
+  const filteredBugs = useMemo(() => {
+    const productSet = new Set(selectedProducts);
+    const patchSet = new Set(selectedPatches);
+    return piEventFilteredBugs.filter((bug) => (
+      (productSet.size === 0 || productSet.has(bug.product))
+      && effectiveVersionSet.has(bug.majorVersion)
+      && (patchSet.size === 0 || (bug.patch !== null && patchSet.has(bug.patch)))
+    ));
+  }, [piEventFilteredBugs, selectedProducts, selectedPatches, effectiveVersionSet]);
+
+  const eventCounts = useMemo(() => {
+    const selectedEventSet = new Set(selectedEvents);
+    const count = { created: 0, closed: 0 };
+    for (const bug of filteredBugs) {
+      if (selectedEventSet.has('created') && bug.createdPi === selectedPi) count.created += 1;
+      if (selectedEventSet.has('closed') && bug.closedPi === selectedPi) count.closed += 1;
+    }
+    return count;
+  }, [filteredBugs, selectedEvents, selectedPi]);
+
+  const eventChartData = useMemo(
+    () => PI_EVENTS.map((event) => ({
+      event,
+      label: PI_EVENT_LABEL[event],
+      value: eventCounts[event],
+    })),
+    [eventCounts],
+  );
+
+  const productGraphOrder: ReleaseProduct[] = ['live', 'onpremise', 'hors_version'];
+
+  const productLabels: Record<ReleaseProduct, string> = {
+    live: 'Live',
+    onpremise: 'On prem',
+    hors_version: 'Hors version',
+    uncategorized: 'Non classé',
+  };
+
+  const productBreakdown = useMemo(() => {
+    return productGraphOrder.map((product) => {
+      const row = {
+        product,
+        label: productLabels[product],
+        created: 0,
+        closed: 0,
+      };
+      for (const bug of filteredBugs) {
+        if (bug.product !== product) continue;
+        if (selectedEvents.includes('created') && bug.createdPi === selectedPi) row.created += 1;
+        if (selectedEvents.includes('closed') && bug.closedPi === selectedPi) row.closed += 1;
+      }
+      return row;
+    });
+  }, [filteredBugs, selectedEvents, selectedPi]);
+
+  const sortedPiWindows = useMemo(
+    () => [...piWindows].sort((a, b) => a.start.localeCompare(b.start) || a.label.localeCompare(b.label, 'fr', { numeric: true, sensitivity: 'base' })),
+    [piWindows],
+  );
+
+  const selectedWindow = useMemo(
+    () => sortedPiWindows.find((window) => window.label === selectedPi) ?? null,
+    [sortedPiWindows, selectedPi],
+  );
+
+  const selectedExercise = useMemo(() => {
+    const match = selectedPi.match(/^(\d{2}-\d{2})\s+PI\d+$/i);
+    return match?.[1] ?? null;
+  }, [selectedPi]);
+
+  const referenceMs = useMemo(() => {
+    if (!selectedWindow) return null;
+    if (selectedWindow.completed) {
+      const endMs = Date.parse(`${selectedWindow.end}T23:59:59.999Z`);
+      return Number.isNaN(endMs) ? null : endMs;
+    }
+    return Date.now();
+  }, [selectedWindow]);
+
+  const exerciseStartMs = useMemo(() => {
+    if (!selectedExercise) return null;
+    const exerciseWindows = sortedPiWindows.filter((window) => window.label.startsWith(`${selectedExercise} `));
+    if (exerciseWindows.length === 0) return null;
+    const startMs = Date.parse(`${exerciseWindows[0].start}T00:00:00.000Z`);
+    return Number.isNaN(startMs) ? null : startMs;
+  }, [selectedExercise, sortedPiWindows]);
+
+  const previousPiEndMs = useMemo(() => {
+    if (!selectedWindow) return null;
+    const scopeWindows = selectedExercise
+      ? sortedPiWindows.filter((window) => window.label.startsWith(`${selectedExercise} `))
+      : sortedPiWindows;
+    const idx = scopeWindows.findIndex((window) => window.label === selectedWindow.label);
+    if (idx <= 0) return null;
+    const prev = scopeWindows[idx - 1];
+    const endMs = Date.parse(`${prev.end}T23:59:59.999Z`);
+    return Number.isNaN(endMs) ? null : endMs;
+  }, [sortedPiWindows, selectedWindow, selectedExercise]);
+
+  const backlogDelta = useMemo(() => {
+    function countAt(atMs: number, scope: 'total' | 'onpremise' | 'live'): number {
+      let count = 0;
+      for (const bug of allBugs) {
+        if (scope === 'onpremise' && bug.product !== 'onpremise') continue;
+        if (scope === 'live' && bug.product !== 'live') continue;
+
+        const createdMs = bug.createdDate ? Date.parse(bug.createdDate) : Number.NaN;
+        if (Number.isNaN(createdMs) || createdMs > atMs) continue;
+
+        const closeSource = bug.closedDate ?? bug.resolvedDate;
+        const closeMs = closeSource ? Date.parse(closeSource) : Number.NaN;
+        const isClosed = !Number.isNaN(closeMs) && closeMs <= atMs;
+        if (isClosed) continue;
+        count += 1;
+      }
+      return count;
+    }
+
+    function delta(baseMs: number | null, scope: 'total' | 'onpremise' | 'live'): number | null {
+      if (referenceMs === null || baseMs === null) return null;
+      return countAt(referenceMs, scope) - countAt(baseMs, scope);
+    }
+
+    return {
+      exercise: {
+        total: delta(exerciseStartMs, 'total'),
+        onpremise: delta(exerciseStartMs, 'onpremise'),
+        live: delta(exerciseStartMs, 'live'),
+      },
+      previousPi: {
+        total: delta(previousPiEndMs, 'total'),
+        onpremise: delta(previousPiEndMs, 'onpremise'),
+        live: delta(previousPiEndMs, 'live'),
+      },
+    };
+  }, [allBugs, referenceMs, exerciseStartMs, previousPiEndMs]);
+
+  const exerciseStartDate = useMemo(() => {
+    if (!selectedExercise) return null;
+    const exerciseWindows = sortedPiWindows.filter((window) => window.label.startsWith(`${selectedExercise} `));
+    return exerciseWindows[0]?.start ?? null;
+  }, [selectedExercise, sortedPiWindows]);
+
+  const todayDate = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, [selectedPi]);
+
+  const exerciseBacklogExcerptRows = useMemo(() => {
+    if (!exerciseStartDate) return [];
+    return backlogSeries.filter((row) => row.date >= exerciseStartDate && row.date <= todayDate);
+  }, [backlogSeries, exerciseStartDate, todayDate]);
+
+  const excerptYAxisMax = useMemo(() => {
+    const maxValue = exerciseBacklogExcerptRows.reduce(
+      (acc, row) => Math.max(acc, row.total, row.live, row.onpremise, row.hors),
+      0,
+    );
+    const target = Math.max(450, maxValue);
+    return Math.ceil(target / 25) * 25;
+  }, [exerciseBacklogExcerptRows]);
+
+  const excerptTickStep = useMemo(() => {
+    if (exerciseBacklogExcerptRows.length > 240) return 28;
+    if (exerciseBacklogExcerptRows.length > 160) return 21;
+    if (exerciseBacklogExcerptRows.length > 100) return 14;
+    if (exerciseBacklogExcerptRows.length > 60) return 7;
+    if (exerciseBacklogExcerptRows.length > 30) return 3;
+    return 1;
+  }, [exerciseBacklogExcerptRows.length]);
+
+  const excerptTickFormatter = (value: string, index: number) => {
+    const isLastTick = index === exerciseBacklogExcerptRows.length - 1;
+    if (!isLastTick && index % excerptTickStep !== 0) return '';
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  };
+
+  const excerptTooltipDateFormatter = (value: string) => {
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const hasReleaseFilter = selectedProducts.length > 0 || selectedVersions.length > 0 || selectedPatches.length > 0;
+  const hasEventFilter = selectedEvents.length !== PI_EVENTS.length;
+  const hasPiFilter = defaultPi ? selectedPi !== defaultPi : false;
+  const hasFilter = hasReleaseFilter || hasEventFilter || hasPiFilter;
+
+  useEffect(() => {
+    savePersistedPiFollowupFilters({
+      piLabel: selectedPi || null,
+      events: selectedEvents,
+      products: selectedProducts,
+      versions: selectedVersions,
+      patches: selectedPatches,
+    });
+  }, [selectedPi, selectedEvents, selectedProducts, selectedVersions, selectedPatches]);
+
+  const formatShortDate = (value: string | null): string => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleDateString('fr-FR');
+  };
+
+  function DeltaValue({ value }: { value: number | null }) {
+    if (value === null) {
+      return (
+        <div className="mt-2 flex items-center gap-2 text-gray-400">
+          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-gray-300">
+            <span className="block h-[2px] w-2 rounded bg-gray-400" />
+          </span>
+          <span className="font-mono text-sm">N/A</span>
+        </div>
+      );
+    }
+
+    if (value > 0) {
+      return (
+        <div className="mt-2 flex items-center gap-2 text-red-600">
+          <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M8 13V3" />
+            <path d="M4 7l4-4 4 4" />
+          </svg>
+          <span className="font-mono text-sm">{value > 0 ? `+${value}` : value}</span>
+        </div>
+      );
+    }
+
+    if (value < 0) {
+      return (
+        <div className="mt-2 flex items-center gap-2 text-emerald-600">
+          <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M8 3v10" />
+            <path d="M4 9l4 4 4-4" />
+          </svg>
+          <span className="font-mono text-sm">{value}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-2 flex items-center gap-2 text-gray-500">
+        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-gray-300">
+          <span className="block h-[2px] w-2 rounded bg-gray-500" />
+        </span>
+        <span className="font-mono text-sm">0</span>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-5 bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="min-w-[220px]">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">PI</div>
+            <select
+              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#66D2DB]/40"
+              value={selectedPi}
+              onChange={(e) => setSelectedPi(e.target.value)}
+            >
+              {piWindows.map((window) => (
+                <option key={window.label} value={window.label}>
+                  {window.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <MultiSelect
+            label="Évènement"
+            options={PI_EVENTS}
+            selected={selectedEvents}
+            onChange={(next) => setSelectedEvents(next.filter((value): value is PiEventKey => PI_EVENTS.includes(value as PiEventKey)))}
+            renderOption={(value) => PI_EVENT_LABEL[value as PiEventKey] ?? value}
+          />
+          <MultiSelect
+            label="Produit"
+            options={productOptions.map((option) => option.value)}
+            selected={selectedProducts}
+            onChange={(next) => setSelectedProducts(next.filter((value): value is ReleaseProduct => productOptions.some((option) => option.value === value)))}
+            renderOption={(value) => productLabels[value as ReleaseProduct] ?? value}
+          />
+          <MultiSelect label="Version" options={versionOptions} selected={selectedVersions} onChange={setSelectedVersions} />
+          <MultiSelect label="Patch" options={patchOptions} selected={selectedPatches} onChange={setSelectedPatches} />
+
+          <div className="ml-auto flex items-center gap-2">
+            {hasFilter && (
+              <button
+                onClick={() => {
+                  setSelectedPi(defaultPi || piWindows[0]?.label || '');
+                  setSelectedEvents([...PI_EVENTS]);
+                  setSelectedProducts([]);
+                  setSelectedVersions([]);
+                  setSelectedPatches([]);
+                }}
+                className="text-xs text-blue-500 hover:text-blue-700 border border-blue-200 rounded-full px-2.5 py-1"
+              >
+                Réinitialiser tous les filtres
+              </button>
+            )}
+            <span className="text-xs text-gray-400 whitespace-nowrap">
+              {filteredBugs.length} / {piEventFilteredBugs.length} bug{piEventFilteredBugs.length > 1 ? 's' : ''}
+              {hasFilter ? ' (filtres)' : ''}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {loading && <div className="text-xs text-gray-400 mb-3">Chargement des données...</div>}
+      {error && <div className="text-xs text-red-500 mb-3">Erreur KPI Suivi par PI: {error}</div>}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4 mb-5">
+        {PI_EVENTS.map((event) => (
+          <div key={event} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 xl:col-span-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{PI_EVENT_LABEL[event]}</div>
+            <div className="mt-2 text-3xl font-semibold text-[#0e1a38]">{eventCounts[event]}</div>
+            <div className="mt-1 text-[11px] text-gray-400">{selectedPi || 'Aucun PI'}</div>
+          </div>
+        ))}
+
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 xl:col-span-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-3">Tendance backlog vs début d'exercice</div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-lg border border-gray-100 p-3">
+              <div className="text-[11px] text-gray-500">Total</div>
+              <DeltaValue value={backlogDelta.exercise.total} />
+            </div>
+            <div className="rounded-lg border border-gray-100 p-3">
+              <div className="text-[11px] text-gray-500">OnPrem</div>
+              <DeltaValue value={backlogDelta.exercise.onpremise} />
+            </div>
+            <div className="rounded-lg border border-gray-100 p-3">
+              <div className="text-[11px] text-gray-500">Live</div>
+              <DeltaValue value={backlogDelta.exercise.live} />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 xl:col-span-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-3">Tendance backlog vs dernier PI</div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-lg border border-gray-100 p-3">
+              <div className="text-[11px] text-gray-500">Total</div>
+              <DeltaValue value={backlogDelta.previousPi.total} />
+            </div>
+            <div className="rounded-lg border border-gray-100 p-3">
+              <div className="text-[11px] text-gray-500">OnPrem</div>
+              <DeltaValue value={backlogDelta.previousPi.onpremise} />
+            </div>
+            <div className="rounded-lg border border-gray-100 p-3">
+              <div className="text-[11px] text-gray-500">Live</div>
+              <DeltaValue value={backlogDelta.previousPi.live} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4 mb-5">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 xl:col-span-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-3">Évènements du PI</div>
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={eventChartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={ttStyle()} />
+              <Bar dataKey="value" name="Bugs" maxBarSize={52} radius={[3, 3, 0, 0]}>
+                {eventChartData.map((entry) => (
+                  <Cell key={entry.event} fill={PI_EVENT_BAR_COLORS[entry.event]} />
+                ))}
+              </Bar>
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 xl:col-span-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-3">Répartition par produit</div>
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={productBreakdown} barGap={2} barCategoryGap="24%" margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={ttStyle()} />
+              <Legend iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 12 }} />
+              <Bar dataKey="created" name="Créés" fill={PI_EVENT_BAR_COLORS.created} maxBarSize={24} radius={[2, 2, 0, 0]} />
+              <Bar dataKey="closed" name="Fermés" fill={PI_EVENT_BAR_COLORS.closed} maxBarSize={24} radius={[2, 2, 0, 0]} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 xl:col-span-6 md:col-span-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-3">Extrait Evolution backlog</div>
+          {backlogExcerptLoading && (
+            <div className="h-[240px] flex items-center justify-center text-xs text-gray-400">
+              Chargement des données...
+            </div>
+          )}
+          {!backlogExcerptLoading && exerciseStartDate === null && (
+            <div className="h-[240px] flex items-center justify-center text-xs text-gray-400">
+              Dates exercice invalides
+            </div>
+          )}
+          {!backlogExcerptLoading && exerciseStartDate !== null && exerciseBacklogExcerptRows.length === 0 && (
+            <div className="h-[240px] flex items-center justify-center text-xs text-gray-400">
+              Pas de données sur la période
+            </div>
+          )}
+          {!backlogExcerptLoading && exerciseStartDate !== null && exerciseBacklogExcerptRows.length > 0 && (
+            <ResponsiveContainer width="100%" height={320}>
+              <AreaChart data={exerciseBacklogExcerptRows} margin={{ top: 5, right: 20, left: -10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gPiExcerptTotal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#1E40AF" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#1E40AF" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gPiExcerptOnprem" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={C.onpremise} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={C.onpremise} stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gPiExcerptLive" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={C.live} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={C.live} stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gPiExcerptHors" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={C.horsVersion} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={C.horsVersion} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  interval={0}
+                  minTickGap={8}
+                  tickFormatter={excerptTickFormatter}
+                  tick={{ fontSize: 11, fill: '#9ca3af' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  domain={[0, excerptYAxisMax]}
+                  allowDecimals={false}
+                  tick={{ fontSize: 11, fill: '#9ca3af' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip contentStyle={ttStyle()} labelFormatter={(value) => excerptTooltipDateFormatter(String(value))} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
+                <Area type="linear" dataKey="total" name="Total" stroke="#1E40AF" strokeWidth={2} fill="url(#gPiExcerptTotal)" />
+                <Area type="linear" dataKey="onpremise" name="OnPremise" stroke={C.onpremise} strokeWidth={1.5} fill="url(#gPiExcerptOnprem)" />
+                <Area type="linear" dataKey="live" name="Live" stroke={C.live} strokeWidth={1.5} fill="url(#gPiExcerptLive)" />
+                <Area type="linear" dataKey="hors" name="Hors version" stroke={C.horsVersion} strokeWidth={1.5} fill="url(#gPiExcerptHors)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+          {!backlogExcerptLoading && backlogExcerptError && (
+            <div className="pt-2 text-[11px] text-amber-600">
+              Impossible de rafraîchir l&apos;évolution backlog ({backlogExcerptError}).
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-16">ID</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-[30%]">Titre</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-32">Version</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-24">État</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-32">Équipe</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-24">Créé</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 w-24">Fermé</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Évènements PI</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredBugs.map((bug) => {
+              const rowEvents = PI_EVENTS.filter((event) => hasPiEvent(bug, event, selectedPi));
+              return (
+                <tr
+                  key={bug.id}
+                  className={[
+                    'border-b border-gray-50 transition-colors',
+                    'hover:bg-blue-50/40',
+                  ].join(' ')}
+                >
+                  <td className="px-4 py-2 font-mono text-gray-400">{bug.id}</td>
+                  <td className="px-4 py-2 text-gray-700 max-w-0" style={{ maxWidth: 300 }}>
+                    <span
+                      title={bug.title}
+                      style={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        whiteSpace: 'normal',
+                        lineHeight: '1.25rem',
+                        maxHeight: '2.5rem',
+                      }}
+                    >
+                      {bug.title}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-gray-600 font-mono">{bug.version || 'vide'}</td>
+                  <td className="px-4 py-2">
+                    <span className={[
+                      'inline-flex px-2 py-0.5 rounded text-[10px] font-semibold border',
+                      STATE_BADGE[bug.state] ?? 'bg-gray-50 text-gray-500',
+                    ].join(' ')}>
+                      {bug.state}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-gray-600">{bug.team}</td>
+                  <td className="px-4 py-2 text-gray-500 font-mono">{bug.createdPi === selectedPi ? formatShortDate(bug.createdDate) : '-'}</td>
+                  <td className="px-4 py-2 text-gray-500 font-mono">{bug.closedPi === selectedPi ? formatShortDate(bug.closedDate) : '-'}</td>
+                  <td className="px-4 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {rowEvents.length === 0 && <span className="text-[10px] text-gray-400">-</span>}
+                      {rowEvents.map((event) => (
+                        <span
+                          key={`${bug.id}-${event}`}
+                          className="inline-flex px-2 py-0.5 rounded text-[10px] font-medium text-white"
+                          style={{ backgroundColor: PI_EVENT_COLORS[event] }}
+                        >
+                          {PI_EVENT_LABEL[event]}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {filteredBugs.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-xs">
+                  Aucun bug touché sur ce PI pour ces filtres.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
@@ -1884,6 +2815,218 @@ function TeamBacklogsTab({ refreshKey }: { refreshKey: number }) {
   );
 }
 
+function RetentionTab({ refreshKey }: { refreshKey: number }) {
+  const [data, setData] = useState<RetentionResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [segmentType, setSegmentType] = useState<RetentionSegmentType>('product');
+  const [selectedSegmentKey, setSelectedSegmentKey] = useState<RetentionSegmentKey | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch('/api/kpis/retention');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = await res.json() as RetentionResponse;
+        if (!cancelled) setData(body);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Erreur inconnue');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
+  const segments = useMemo(
+    () => segmentType === 'filiere' ? (data?.filiere ?? []) : (data?.product ?? []),
+    [data, segmentType],
+  );
+
+  useEffect(() => {
+    if (segments.length === 0) {
+      setSelectedSegmentKey(null);
+      return;
+    }
+    setSelectedSegmentKey((prev) => {
+      if (prev && segments.some((segment) => segment.key === prev)) return prev;
+      return segments[0].key;
+    });
+  }, [segments]);
+
+  const distribution = useMemo(() => {
+    if (!data || !selectedSegmentKey) return [];
+    return data.distributions.find(
+      (entry) => entry.segmentType === segmentType && entry.segmentKey === selectedSegmentKey,
+    )?.buckets ?? [];
+  }, [data, segmentType, selectedSegmentKey]);
+
+  const selectedSegmentLabel = useMemo(() => {
+    if (!selectedSegmentKey) return '';
+    return segments.find((segment) => segment.key === selectedSegmentKey)?.label ?? '';
+  }, [segments, selectedSegmentKey]);
+
+  const summary = data?.summary;
+
+  return (
+    <div>
+      {loading && <div className="text-xs text-gray-400 mb-3">Chargement des donnees...</div>}
+      {error && <div className="text-xs text-red-500 mb-3">Erreur KPI Retention: {error}</div>}
+
+      {data && summary && (
+        <>
+          <div className="grid grid-cols-4 gap-4 mb-4">
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Bugs suivis</div>
+              <div className="mt-2 text-2xl font-semibold text-[#0e1a38]">{summary.totalBugs}</div>
+              <div className="mt-1 text-[11px] text-gray-400">Données au {new Date(`${data.asOfDate}T00:00:00Z`).toLocaleDateString('fr-FR')}</div>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Backlog ouvert</div>
+              <div className="mt-2 text-2xl font-semibold text-[#0e1a38]">{summary.openCount}</div>
+              <div className="mt-1 text-[11px] text-gray-400">{summary.over60OpenRate.toFixed(1)}% &gt; 60j</div>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Fermés analysés</div>
+              <div className="mt-2 text-2xl font-semibold text-[#0e1a38]">{summary.closedCount}</div>
+              <div className="mt-1 text-[11px] text-gray-400">Médiane fermeture: {summary.medianCloseDays.toFixed(1)} j</div>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Âge backlog ouvert</div>
+              <div className="mt-2 text-2xl font-semibold text-[#0e1a38]">{summary.medianOpenAgeDays.toFixed(1)} j</div>
+              <div className="mt-1 text-[11px] text-gray-400">{summary.over90OpenRate.toFixed(1)}% &gt; 90j</div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 mb-4">
+            <div className="text-xs text-gray-500">
+              Période d'analyse: <strong>{data.period.label}</strong> du{' '}
+              <strong>{new Date(`${data.period.start}T00:00:00Z`).toLocaleDateString('fr-FR')}</strong> au{' '}
+              <strong>{new Date(`${data.period.end}T00:00:00Z`).toLocaleDateString('fr-FR')}</strong>.
+            </div>
+            <div className="mt-2 text-xs text-gray-400">
+              Âge médian (j): médiane du nombre de jours depuis la création des bugs encore ouverts.
+              Fermeture médiane (j): médiane du délai création → fermeture pour les bugs fermés sur la période.
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Comparatif rétention</div>
+              <div className="inline-flex rounded-xl border border-gray-200 p-1 bg-gray-50">
+                <button
+                  type="button"
+                  onClick={() => setSegmentType('filiere')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${segmentType === 'filiere' ? 'bg-white text-[#1E40AF] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Par filière
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSegmentType('product')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${segmentType === 'product' ? 'bg-white text-[#1E40AF] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Par produit
+                </button>
+              </div>
+            </div>
+
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={segments} margin={{ top: 5, right: 10, left: -15, bottom: 0 }} barGap={1} barCategoryGap="24%">
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <YAxis yAxisId="left" allowDecimals={false} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  contentStyle={ttStyle()}
+                  formatter={(value, name) => {
+                    const n = typeof value === 'number' ? value : Number(value ?? 0);
+                    if (String(name).includes('%')) return [`${n.toFixed(1)}%`, String(name)];
+                    return [`${n.toFixed(1)} j`, String(name)];
+                  }}
+                />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                <Bar yAxisId="left" dataKey="medianCloseDays" name="Fermeture médiane (j)" fill="#6FAEEB" maxBarSize={28} radius={[3, 3, 0, 0]} />
+                <Bar yAxisId="left" dataKey="medianOpenAgeDays" name="Âge médian ouvert (j)" fill="#F4A8C6" maxBarSize={28} radius={[3, 3, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="over60OpenRate" name="% ouverts > 60j" stroke="#7C3AED" strokeWidth={2} dot={{ r: 2.5 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                Détail des indicateurs
+              </div>
+              <div className="overflow-auto">
+                <table className="w-full text-xs min-w-[680px]">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="text-left px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Segment</th>
+                      <th className="text-right px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Ouverts</th>
+                      <th className="text-right px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Fermés</th>
+                      <th className="text-right px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Âge médian (j)</th>
+                      <th className="text-right px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Fermeture médiane (j)</th>
+                      <th className="text-right px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">% &gt; 60j</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {segments.map((segment) => (
+                      <tr key={segment.key} className="border-b border-gray-50">
+                        <td className="px-3 py-2 text-[#0e1a38] font-medium">{segment.label}</td>
+                        <td className="px-3 py-2 text-right text-gray-600">{segment.openCount}</td>
+                        <td className="px-3 py-2 text-right text-gray-600">{segment.closedCount}</td>
+                        <td className="px-3 py-2 text-right text-gray-600">{segment.medianOpenAgeDays.toFixed(1)}</td>
+                        <td className="px-3 py-2 text-right text-gray-600">{segment.medianCloseDays.toFixed(1)}</td>
+                        <td className="px-3 py-2 text-right text-gray-600">{segment.over60OpenRate.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {segments.map((segment) => (
+                  <button
+                    key={segment.key}
+                    type="button"
+                    onClick={() => setSelectedSegmentKey(segment.key)}
+                    className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${selectedSegmentKey === segment.key ? 'bg-[#1E40AF] text-white border-[#1E40AF]' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}
+                  >
+                    {segment.label}
+                  </button>
+                ))}
+              </div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2">
+                Répartition âge backlog ouvert - {selectedSegmentLabel}
+              </div>
+              <ResponsiveContainer width="100%" height={240}>
+                <ComposedChart data={distribution} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                  <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={ttStyle()} />
+                  <Bar dataKey="count" name="Bugs ouverts" fill="#8FBFF6" maxBarSize={34} radius={[3, 3, 0, 0]}>
+                    {distribution.map((bucket, index) => (
+                      <Cell key={`${bucket.bucket}-${index}`} fill={bucket.bucket === '>90j' ? '#F4A8C6' : '#8FBFF6'} />
+                    ))}
+                  </Bar>
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // â”€â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function Kpis() {
@@ -1944,7 +3087,9 @@ export default function Kpis() {
       {tab === 'defect-debt'   && <DefectDebtTab refreshKey={refreshKey} />}
       {tab === 'backlog-evo'   && <BacklogEvoTab refreshKey={refreshKey} />}
       {tab === 'terrain-returns' && <TerrainReturnsTab refreshKey={refreshKey} />}
+      {tab === 'retention' && <RetentionTab refreshKey={refreshKey} />}
       {tab === 'suivi-release' && <SuiviReleaseTab refreshKey={refreshKey} />}
+      {tab === 'suivi-pi' && <SuiviPiTab refreshKey={refreshKey} />}
       {tab === 'closed-by-pi'  && <ClosedByPiTab refreshKey={refreshKey} />}
       {tab === 'team-backlogs' && <TeamBacklogsTab refreshKey={refreshKey} />}
     </Layout>
