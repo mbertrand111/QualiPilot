@@ -123,14 +123,14 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
     </svg>
   );
   return dir === 'asc'
-    ? <svg className="w-3 h-3 text-[#1E63B6] ml-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
-    : <svg className="w-3 h-3 text-[#1E63B6] ml-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>;
+    ? <svg className="w-3 h-3 text-[#1E40AF] ml-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
+    : <svg className="w-3 h-3 text-[#1E40AF] ml-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>;
 }
 
 function Th({ col, label, sort, dir, onSort, className = '' }: { col: string; label: string; sort: string; dir: SortDir; onSort: (c: string) => void; className?: string }) {
   const active = sort === col;
   return (
-    <th onClick={() => onSort(col)} className={`text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide cursor-pointer select-none whitespace-nowrap ${active ? 'text-[#1E63B6]' : 'text-gray-400 hover:text-gray-600'} ${className}`}>
+    <th onClick={() => onSort(col)} className={`text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide cursor-pointer select-none whitespace-nowrap ${active ? 'text-[#1E40AF]' : 'text-gray-400 hover:text-gray-600'} ${className}`}>
       <span className="flex items-center">{label}<SortIcon active={active} dir={dir} /></span>
     </th>
   );
@@ -234,7 +234,7 @@ export default function Triage() {
     if (filterVersion)  params.set('version',  filterVersion);
     if (filterFoundIn)  params.set('found_in', filterFoundIn);
     if (filterBuild)    params.set('build',    filterBuild);
-    fetch(`/api/stats/triage?${params}`).then(r => r.json()).then(setTriageStats).catch(() => {});
+    fetch(`/api/stats/triage?${params}`).then(r => r.json()).then(setTriageStats).catch(() => { setError('Impossible de charger les statistiques de triage.'); });
   }, [filterStates, filterSprints, filterBugTypes, filterFilieres, filterId, filterTitle, filterVersion, filterFoundIn, filterBuild]);
 
   useEffect(() => {
@@ -242,8 +242,8 @@ export default function Triage() {
   }, [loadTriageStats]);
 
   useEffect(() => {
-    fetch('/api/bugs/meta/sprints').then(r => r.json()).then(setSprints).catch(() => {});
-    fetch('/api/bugs/meta/areas').then(r => r.json()).then(setAreaPaths).catch(() => {});
+    fetch('/api/bugs/meta/sprints').then(r => r.json()).then(setSprints).catch((err: unknown) => { console.error('meta/sprints', err); });
+    fetch('/api/bugs/meta/areas').then(r => r.json()).then(setAreaPaths).catch((err: unknown) => { console.error('meta/areas', err); });
   }, []);
 
   const load = useCallback(async (p: number) => {
@@ -431,7 +431,7 @@ export default function Triage() {
               key={card.key}
               onClick={() => handleCardClick(card.key)}
               className={`text-left w-full rounded-2xl p-5 shadow-sm border transition-all hover:shadow-md ${
-                isActive ? 'bg-[#1E63B6] border-[#1E63B6]' : `bg-white ${card.borderColor} ${card.hoverBg}`
+                isActive ? 'bg-[#1E40AF] border-[#1E40AF]' : `bg-white ${card.borderColor} ${card.hoverBg}`
               }`}
             >
               <div className={`text-[11px] font-semibold uppercase tracking-wider mb-3 ${isActive ? 'text-white/70' : card.textColor}`}>
@@ -508,7 +508,7 @@ export default function Triage() {
                 placeholder={label}
                 value={value}
                 onChange={e => set(e.target.value)}
-                className="text-sm border border-gray-200 rounded-lg pl-3 pr-7 py-2 bg-white text-[#2B2B2B] placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#66D2DB]/40 w-52"
+                className="text-sm border border-gray-200 rounded-lg pl-3 pr-7 py-2 bg-white text-[#2B2B2B] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#66D2DB]/40 w-52"
               />
               {value && (
                 <button onClick={() => set('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-lg leading-none">×</button>
@@ -534,7 +534,7 @@ export default function Triage() {
                       checked={allSelected}
                       ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
                       onChange={toggleAll}
-                      className="rounded border-gray-300 text-[#1E63B6] focus:ring-[#1E63B6]/30 cursor-pointer"
+                      className="rounded border-gray-300 text-[#1E40AF] focus:ring-[#1E40AF]/30 cursor-pointer"
                     />
                   </th>
                   <Th col="id"                label="ID"                sort={sort} dir={dir} onSort={handleSort} />
@@ -570,10 +570,10 @@ export default function Triage() {
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleOne(bug.id)}
-                          className="rounded border-gray-300 text-[#1E63B6] focus:ring-[#1E63B6]/30 cursor-pointer"
+                          className="rounded border-gray-300 text-[#1E40AF] focus:ring-[#1E40AF]/30 cursor-pointer"
                         />
                       </td>
-                      <td className="px-4 py-3 font-mono text-[12px] text-[#1E63B6] font-semibold whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                      <td className="px-4 py-3 font-mono text-[12px] text-[#1E40AF] font-semibold whitespace-nowrap" onClick={e => e.stopPropagation()}>
                         <a href={`https://dev.azure.com/Isagri-Prod-Progiciels/Isagri_Dev_GC_GestionCommerciale/_workitems/edit/${bug.id}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
                           #{bug.id}
                         </a>
@@ -617,7 +617,7 @@ export default function Triage() {
       {selectedIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[#0e1a38] text-white rounded-2xl shadow-2xl border border-white/10 px-5 py-3.5 flex items-center gap-4 min-w-[560px] max-w-2xl">
           <div className="flex items-center gap-2 shrink-0">
-            <span className="w-6 h-6 rounded-full bg-[#1E63B6] text-[11px] font-bold flex items-center justify-center">
+            <span className="w-6 h-6 rounded-full bg-[#1E40AF] text-[11px] font-bold flex items-center justify-center">
               {selectedIds.size}
             </span>
             <span className="text-sm font-semibold">bug{selectedIds.size > 1 ? 's' : ''} sélectionné{selectedIds.size > 1 ? 's' : ''}</span>
@@ -678,14 +678,14 @@ export default function Triage() {
               value={bulkValue}
               onChange={e => setBulkValue(e.target.value)}
               placeholder="Nouvelle valeur..."
-              className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 flex-1 min-w-[180px]"
+              className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/50 flex-1 min-w-[180px]"
             />
           )}
 
           <button
             onClick={() => setConfirmBulk(true)}
             disabled={savingBulk || !bulkValue}
-            className="shrink-0 px-4 py-1.5 rounded-xl text-sm font-semibold bg-[#1E63B6] hover:bg-[#2a78d6] disabled:opacity-50 disabled:cursor-wait transition-colors"
+            className="shrink-0 px-4 py-1.5 rounded-xl text-sm font-semibold bg-[#1E40AF] hover:bg-[#2a78d6] disabled:opacity-50 disabled:cursor-wait transition-colors"
           >
             {savingBulk ? 'Enregistrement…' : 'Appliquer'}
           </button>

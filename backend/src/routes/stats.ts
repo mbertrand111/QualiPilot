@@ -1,6 +1,12 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { getDb } from '../db';
 import { listKpiTeamBacklogHistory } from '../services/kpiHistory';
+import { requireApiKey } from '../middleware/security';
+
+const AckSchema = z.object({
+  ids: z.array(z.number().int().positive()).optional(),
+});
 
 const router = Router();
 
@@ -121,11 +127,14 @@ router.get('/stats/auto-fixes', (req, res) => {
 
 // POST /api/stats/auto-fixes/ack
 // Valide (et retire du tableau) les corrections auto, toutes ou un sous-ensemble d'IDs.
-router.post('/stats/auto-fixes/ack', (req, res) => {
+router.post('/stats/auto-fixes/ack', requireApiKey, (req, res) => {
+  const parsed = AckSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Requête invalide' });
+    return;
+  }
   const db = getDb();
-  const ids = Array.isArray(req.body?.ids)
-    ? req.body.ids.map((v: unknown) => parseInt(String(v), 10)).filter((n: number) => Number.isFinite(n) && n > 0)
-    : [];
+  const ids = parsed.data.ids ?? [];
 
   let acknowledged = 0;
   if (ids.length > 0) {

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { config } from '../config';
 
@@ -13,6 +14,10 @@ export function setSecurityHeaders(_req: Request, res: Response, next: NextFunct
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'none'; frame-ancestors 'none'",
+  );
   next();
 }
 
@@ -26,7 +31,18 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction): 
   const headerToken = getBearerToken(req.header('authorization'));
   const queryToken = typeof req.query.api_key === 'string' ? req.query.api_key : null;
   const token = headerToken ?? queryToken;
-  if (token !== config.api.writeApiKey) {
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized: invalid API key' });
+    return;
+  }
+  try {
+    const a = Buffer.from(token);
+    const b = Buffer.from(config.api.writeApiKey!);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      res.status(401).json({ error: 'Unauthorized: invalid API key' });
+      return;
+    }
+  } catch {
     res.status(401).json({ error: 'Unauthorized: invalid API key' });
     return;
   }

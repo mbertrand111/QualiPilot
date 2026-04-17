@@ -60,7 +60,7 @@ export function MultiSelectDropdown({
         onClick={() => setOpen((prev) => !prev)}
         className={cx(
           'h-9 w-full rounded-xl border border-slate-200 bg-white px-3 pr-9 text-left text-sm font-medium text-[#0e1a38] shadow-sm transition-all',
-          'hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#1E63B6]/15',
+          'hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#1E40AF]/15',
         )}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -116,7 +116,7 @@ export function MultiSelectDropdown({
                     <span
                       className={cx(
                         'inline-flex h-4 w-4 items-center justify-center rounded border',
-                        checked ? 'border-[#1E63B6] bg-[#1E63B6] text-white' : 'border-slate-300 bg-white text-transparent',
+                        checked ? 'border-[#1E40AF] bg-[#1E40AF] text-white' : 'border-slate-300 bg-white text-transparent',
                       )}
                     >
                       <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">

@@ -21,7 +21,7 @@ export function ConfirmModal({ title, message, confirmLabel = 'Confirmer', onCon
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
+      <div role="button" aria-label="Annuler" tabIndex={0} className="absolute inset-0 bg-black/40" onClick={onCancel} onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }} />
 
       {/* Card */}
       <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 p-6">
@@ -48,7 +48,7 @@ export function ConfirmModal({ title, message, confirmLabel = 'Confirmer', onCon
           <button
             onClick={onConfirm}
             disabled={loading}
-            className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-[#1E63B6] hover:bg-[#0F3E8A] disabled:opacity-50 disabled:cursor-wait"
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-[#1E40AF] hover:bg-[#0F3E8A] disabled:opacity-50 disabled:cursor-wait"
           >
             {loading ? 'Enregistrement…' : confirmLabel}
           </button>

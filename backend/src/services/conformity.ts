@@ -110,18 +110,20 @@ function isValidFahVersionFormat(v: string): boolean {
 }
 
 function isValidOnPremisePatchFormat(v: string): boolean {
-  // Format Patch OnPremise : "13.86.xxx Patch N" ou "13.87.xxx Patch N"
-  // xxx doit être un multiple de 50 (inclut les multiples de 100), N obligatoire
-  const m = v.match(/^13\.(86|87)\.(\d+)\s+Patch\s+(\d+)$/i);
+  // 13.87.XXX Patch N — tout entier XXX accepté
+  if (/^13\.87\.\d+\s+Patch\s+\d+$/i.test(v)) return true;
+  // 13.86.XXX Patch N — xxx doit être un multiple de 50
+  const m = v.match(/^13\.86\.(\d+)\s+Patch\s+(\d+)$/i);
   if (!m) return false;
-  return parseInt(m[2], 10) % 50 === 0;
+  return parseInt(m[1], 10) % 50 === 0;
 }
 function isValidOnPremiseMajorFormat(v: string): boolean {
-  // Format OnPremise standard : "13.86.xxx" ou "13.87.xxx"
-  // xxx doit être un multiple de 50 (inclut les multiples de 100)
-  const m = v.match(/^13\.(86|87)\.(\d+)$/);
+  // 13.87.XXX [Export] — tout entier XXX accepté, suffixe "Export" optionnel
+  if (/^13\.87\.\d+(?:\s+Export)?$/i.test(v)) return true;
+  // 13.86.XXX [Export] — xxx doit être un multiple de 50, suffixe "Export" optionnel
+  const m = v.match(/^13\.86\.(\d+)(?:\s+Export)?$/i);
   if (!m) return false;
-  return parseInt(m[2], 10) % 50 === 0;
+  return parseInt(m[1], 10) % 50 === 0;
 }
 
 function foundInYear(foundIn: string): number | null {

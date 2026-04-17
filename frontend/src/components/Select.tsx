@@ -13,7 +13,7 @@ function cx(...parts: Array<string | undefined | false>) {
 }
 
 const toneClasses: Record<SelectTone, string> = {
-  default: 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 focus:border-[#1E63B6]/55 focus:ring-[#1E63B6]/15',
+  default: 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 focus:border-[#1E40AF]/55 focus:ring-[#1E40AF]/15',
   inverse: 'border-white/35 bg-white text-slate-800 hover:border-white/60 focus:border-[#66D2DB]/70 focus:ring-[#66D2DB]/25',
   editing: 'border-amber-300 bg-amber-50 text-amber-900 hover:border-amber-400 focus:border-amber-500 focus:ring-amber-200/80',
 };

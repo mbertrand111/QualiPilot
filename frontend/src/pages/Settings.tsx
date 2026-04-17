@@ -540,7 +540,7 @@ export default function Settings() {
                   'rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors',
                   savingSprintCalendar || loadingSprintCalendar || sprintCalendarRows.length === 0
                     ? 'cursor-not-allowed border-gray-200 bg-gray-50 text-gray-300'
-                    : 'border-[#1E63B6]/30 bg-white text-[#1E63B6] hover:border-[#1E63B6] hover:bg-blue-50',
+                    : 'border-[#1E40AF]/30 bg-white text-[#1E40AF] hover:border-[#1E40AF] hover:bg-blue-50',
                 ].join(' ')}
               >
                 {savingSprintCalendar ? 'Enregistrement...' : 'Enregistrer'}
@@ -626,7 +626,7 @@ export default function Settings() {
                                           type="checkbox"
                                           checked={row.active}
                                           onChange={(e) => updateSprintRow(row.id, { active: e.target.checked })}
-                                          className="rounded border-gray-300 text-[#1E63B6] focus:ring-[#1E63B6]/30"
+                                          className="rounded border-gray-300 text-[#1E40AF] focus:ring-[#1E40AF]/30"
                                         />
                                         Pris en compte
                                       </label>

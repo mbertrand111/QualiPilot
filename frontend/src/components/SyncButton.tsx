@@ -26,7 +26,7 @@ export function SyncButton({ step, onClick, disabled = false }: SyncButtonProps)
         'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all border',
         isDisabled
           ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-wait'
-          : 'bg-white text-gray-600 border-gray-200 hover:border-[#1E63B6] hover:text-[#1E63B6] hover:bg-blue-50',
+          : 'bg-white text-gray-600 border-gray-200 hover:border-[#1E40AF] hover:text-[#1E40AF] hover:bg-blue-50',
       ].join(' ')}
     >
       <SyncIcon spinning={busy} />

@@ -17,7 +17,14 @@
       "Bash(npm --prefix backend run lint)",
       "Bash(node -e \"require\\('better-sqlite3'\\)\")",
       "Read(//c/c/_git/QualiPilot/docs/**)",
-      "Read(//c/c/_git/QualiPilot/backend/src/routes/**)"
+      "Read(//c/c/_git/QualiPilot/backend/src/routes/**)",
+      "Bash(awk '/^export function|^function/ {func=$0; line=NR} /^}/ && func {print line, NR-line, func; func=\"\"}' /c/_git/QualiPilot/backend/src/services/kpis.ts)",
+      "Bash(awk '$2 > 100')",
+      "Bash(find /c/_git/QualiPilot/frontend/src/pages -name \"*.tsx\" -exec wc -l {} +)",
+      "Bash(cat)",
+      "Read(//tmp/**)",
+      "Bash(xargs grep *)",
+      "Bash(xargs sed *)"
     ]
   }
 }

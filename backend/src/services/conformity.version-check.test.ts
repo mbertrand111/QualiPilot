@@ -36,10 +36,10 @@ describe('VERSION_CHECK OnPremise format', () => {
     )).toBe(false);
   });
 
-  it('flags 13.87.xxx when xxx is not a multiple of 50', () => {
+  it('accepts 13.87.xxx even when xxx is not a multiple of 50', () => {
     expect(evalVersionCheck(
       bug({ found_in: '13.87.200', version_souhaitee: '13.87.230' }),
-    )).toBe(true);
+    )).toBe(false);
   });
 
   it('flags 13.86.xxx when xxx is not a multiple of 50', () => {
@@ -69,6 +69,24 @@ describe('VERSION_CHECK OnPremise format', () => {
   it('flags 13.86 patch keyword without numeric patch id', () => {
     expect(evalVersionCheck(
       bug({ found_in: '13.86.700', version_souhaitee: '13.86.750 Patch V7' }),
+    )).toBe(true);
+  });
+
+  it('accepts "13.86.500 Export" in version_souhaitee', () => {
+    expect(evalVersionCheck(
+      bug({ found_in: '13.86.500', version_souhaitee: '13.86.500 Export' }),
+    )).toBe(false);
+  });
+
+  it('accepts "13.87.200 Export" in version_souhaitee', () => {
+    expect(evalVersionCheck(
+      bug({ found_in: '13.87.200', version_souhaitee: '13.87.200 Export' }),
+    )).toBe(false);
+  });
+
+  it('flags "13.86.530 Export" (xxx non multiple de 50) comme violation', () => {
+    expect(evalVersionCheck(
+      bug({ found_in: '13.86.500', version_souhaitee: '13.86.530 Export' }),
     )).toBe(true);
   });
 

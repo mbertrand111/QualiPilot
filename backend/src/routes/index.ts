@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import healthRouter from './health';
 import syncRouter from './sync';
 import bugsRouter from './bugs';
@@ -9,6 +9,7 @@ import kpisRouter from './kpis';
 import settingsRouter from './settings';
 
 const router = Router();
+router.use(express.json({ limit: '10kb' }));
 
 router.use('/', healthRouter);
 router.use('/', syncRouter);

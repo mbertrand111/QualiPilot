@@ -51,14 +51,14 @@ export function MultiSelect({ label, options, selected, onChange, renderOption, 
         className={[
           'flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-all',
           hasSelection
-            ? 'border-[#1E63B6] bg-[#1E63B6]/5 text-[#1E63B6]'
+            ? 'border-[#1E40AF] bg-[#1E40AF]/5 text-[#1E40AF]'
             : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300',
           open ? 'ring-2 ring-[#66D2DB]/40' : '',
         ].join(' ')}
       >
         <span className="font-medium">{label}</span>
         {hasSelection && (
-          <span className="bg-[#1E63B6] text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center shrink-0">
+          <span className="bg-[#1E40AF] text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center shrink-0">
             {selected.length}
           </span>
         )}
@@ -82,7 +82,7 @@ export function MultiSelect({ label, options, selected, onChange, renderOption, 
             ) : (
               <button
                 onClick={() => onChange([...options])}
-                className="text-[11px] text-[#1E63B6] hover:underline font-medium"
+                className="text-[11px] text-[#1E40AF] hover:underline font-medium"
               >
                 Tout sélectionner
               </button>
@@ -103,10 +103,10 @@ export function MultiSelect({ label, options, selected, onChange, renderOption, 
                       const checked = selected.includes(value);
                       return (
                         <li key={value}>
-                          <label className={`flex items-center gap-2.5 pl-5 pr-3 py-2 cursor-pointer transition-colors ${checked ? 'bg-[#1E63B6]/5' : 'hover:bg-gray-50'}`}>
+                          <label className={`flex items-center gap-2.5 pl-5 pr-3 py-2 cursor-pointer transition-colors ${checked ? 'bg-[#1E40AF]/5' : 'hover:bg-gray-50'}`}>
                             <span className={[
                               'w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-colors',
-                              checked ? 'bg-[#1E63B6] border-[#1E63B6]' : 'border-gray-300',
+                              checked ? 'bg-[#1E40AF] border-[#1E40AF]' : 'border-gray-300',
                             ].join(' ')}>
                               {checked && (
                                 <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -128,10 +128,10 @@ export function MultiSelect({ label, options, selected, onChange, renderOption, 
                 const checked = selected.includes(opt);
                 return (
                   <li key={opt}>
-                    <label className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${checked ? 'bg-[#1E63B6]/5' : 'hover:bg-gray-50'}`}>
+                    <label className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${checked ? 'bg-[#1E40AF]/5' : 'hover:bg-gray-50'}`}>
                       <span className={[
                         'w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-colors',
-                        checked ? 'bg-[#1E63B6] border-[#1E63B6]' : 'border-gray-300',
+                        checked ? 'bg-[#1E40AF] border-[#1E40AF]' : 'border-gray-300',
                       ].join(' ')}>
                         {checked && (
                           <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>

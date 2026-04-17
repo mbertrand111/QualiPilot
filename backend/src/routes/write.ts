@@ -1,7 +1,21 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { WRITABLE_FIELDS, writeField, bulkWriteField } from '../services/adoWrite';
 import { AdoError } from '../services/azureDevOps';
 import { requireApiKey } from '../middleware/security';
+
+const PatchFieldSchema = z.object({
+  field: z.string().min(1, 'Champ "field" requis'),
+  value: z.unknown(),
+});
+
+const BulkFieldSchema = z.object({
+  ids: z.array(z.number().int().positive('Les IDs doivent être des entiers positifs'))
+    .min(1, 'Champ "ids" requis (tableau non vide)')
+    .max(200, 'Maximum 200 bugs par opération bulk'),
+  field: z.string().min(1, 'Champ "field" requis'),
+  value: z.unknown(),
+});
 
 const router = Router();
 
@@ -14,12 +28,13 @@ router.patch('/bugs/:id/fields', requireApiKey, async (req, res) => {
     return;
   }
 
-  const { field, value } = req.body as { field?: unknown; value?: unknown };
-
-  if (typeof field !== 'string' || !field) {
-    res.status(400).json({ error: 'Champ "field" requis' });
+  const parsed = PatchFieldSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Requête invalide' });
     return;
   }
+  const { field, value } = parsed.data;
+
   if (!WRITABLE_FIELDS[field]) {
     res.status(400).json({ error: `Champ non autorisé : ${field}. Champs acceptés : ${Object.keys(WRITABLE_FIELDS).join(', ')}` });
     return;
@@ -52,26 +67,13 @@ router.patch('/bugs/:id/fields', requireApiKey, async (req, res) => {
 // ─── POST /api/bugs/bulk-fields — mise à jour d'un champ sur plusieurs bugs ──
 
 router.post('/bugs/bulk-fields', requireApiKey, async (req, res) => {
-  const { ids, field, value } = req.body as { ids?: unknown; field?: unknown; value?: unknown };
+  const parsed = BulkFieldSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Requête invalide' });
+    return;
+  }
+  const { ids: bugIds, field, value } = parsed.data;
 
-  if (!Array.isArray(ids) || ids.length === 0) {
-    res.status(400).json({ error: 'Champ "ids" requis (tableau non vide)' });
-    return;
-  }
-  if (ids.length > 200) {
-    res.status(400).json({ error: 'Maximum 200 bugs par opération bulk' });
-    return;
-  }
-  const bugIds = ids.map(id => Number(id)).filter(id => Number.isInteger(id) && id > 0);
-  if (bugIds.length !== ids.length) {
-    res.status(400).json({ error: 'Tous les IDs doivent être des entiers positifs' });
-    return;
-  }
-
-  if (typeof field !== 'string' || !field) {
-    res.status(400).json({ error: 'Champ "field" requis' });
-    return;
-  }
   if (!WRITABLE_FIELDS[field]) {
     res.status(400).json({ error: `Champ non autorisé : ${field}` });
     return;

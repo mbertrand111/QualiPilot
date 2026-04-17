@@ -50,8 +50,13 @@ export function Home() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<HomeStats | null>(null);
 
+  const [statsError, setStatsError] = useState<string | null>(null);
+
   const loadStats = useCallback(() => {
-    fetch('/api/stats/home').then(r => r.json()).then(setStats).catch(() => {});
+    fetch('/api/stats/home')
+      .then(r => r.json())
+      .then(setStats)
+      .catch(() => { setStatsError('Impossible de charger les statistiques.'); });
   }, []);
 
   useEffect(() => {
@@ -91,6 +96,12 @@ export function Home() {
         <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600 flex items-center justify-between">
           <span>Erreur : {syncError}</span>
           <button onClick={clearSyncError} className="text-red-400 hover:text-red-600">×</button>
+        </div>
+      )}
+
+      {statsError && (
+        <div className="mb-4 bg-red-50 border border-red-100 rounded-2xl px-5 py-3 text-sm text-red-600">
+          {statsError}
         </div>
       )}
 

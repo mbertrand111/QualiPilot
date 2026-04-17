@@ -47,7 +47,7 @@ export function DropdownSelect({ value, options, onChange, className }: Dropdown
         onClick={() => setOpen((prev) => !prev)}
         className={cx(
           'h-9 w-full rounded-xl border border-slate-200 bg-white px-3 pr-9 text-left text-sm font-medium text-[#0e1a38] shadow-sm transition-all',
-          'hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#1E63B6]/15',
+          'hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#1E40AF]/15',
         )}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -80,7 +80,7 @@ export function DropdownSelect({ value, options, onChange, className }: Dropdown
                     type="button"
                     className={cx(
                       'w-full px-3 py-2 text-left text-sm transition-colors',
-                      isActive ? 'bg-[#1E63B6] text-white' : 'text-slate-700 hover:bg-slate-50',
+                      isActive ? 'bg-[#1E40AF] text-white' : 'text-slate-700 hover:bg-slate-50',
                     )}
                     onClick={() => {
                       onChange(opt.value);

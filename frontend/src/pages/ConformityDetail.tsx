@@ -175,16 +175,19 @@ function EditCell({ label, fieldKey, editVal, origVal, editMode, focusMe, type, 
   if (!editMode) {
     return (
       <div
+        role="button"
+        tabIndex={0}
         className="group py-2.5 border-b border-gray-50 last:border-0 cursor-pointer"
         onClick={() => onClickField(fieldKey)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClickField(fieldKey); } }}
         title="Cliquer pour modifier"
       >
         <div className="text-[11px] text-gray-400 font-medium mb-0.5">{label}</div>
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-mono text-gray-700 group-hover:text-[#1E63B6] transition-colors">
+          <span className="text-xs font-mono text-gray-700 group-hover:text-[#1E40AF] transition-colors">
             {editVal || <EmptyVal />}
           </span>
-          <svg className="w-2.5 h-2.5 text-gray-300 group-hover:text-[#1E63B6] opacity-0 group-hover:opacity-100 transition-all shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <svg className="w-2.5 h-2.5 text-gray-300 group-hover:text-[#1E40AF] opacity-0 group-hover:opacity-100 transition-all shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
           </svg>
         </div>
@@ -238,7 +241,7 @@ function EditCell({ label, fieldKey, editVal, origVal, editMode, focusMe, type, 
             autoFocus={focusMe}
             placeholder={`${label}…`}
             className={`w-full text-xs border rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 font-mono transition-all
-              ${isDirty ? 'border-amber-400 focus:ring-amber-200' : 'border-gray-200 focus:ring-[#1E63B6]/20 focus:border-[#1E63B6]/50'}`}
+              ${isDirty ? 'border-amber-400 focus:ring-amber-200' : 'border-gray-200 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF]/50'}`}
           />
           {showSuggestions && filteredSuggestions.length > 0 && (
             <ul className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
@@ -246,7 +249,7 @@ function EditCell({ label, fieldKey, editVal, origVal, editMode, focusMe, type, 
                 <li
                   key={s}
                   onMouseDown={() => { onChange(fieldKey, s); setShowSuggestions(false); }}
-                  className="px-3 py-2 text-xs font-mono text-gray-700 cursor-pointer hover:bg-blue-50 hover:text-[#1E63B6] border-b border-gray-50 last:border-0"
+                  className="px-3 py-2 text-xs font-mono text-gray-700 cursor-pointer hover:bg-blue-50 hover:text-[#1E40AF] border-b border-gray-50 last:border-0"
                 >
                   {s}
                 </li>
@@ -262,7 +265,7 @@ function EditCell({ label, fieldKey, editVal, origVal, editMode, focusMe, type, 
           autoFocus={focusMe}
           placeholder={`${label}…`}
           className={`w-full text-xs border rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 font-mono transition-all
-            ${isDirty ? 'border-amber-400 focus:ring-amber-200' : 'border-gray-200 focus:ring-[#1E63B6]/20 focus:border-[#1E63B6]/50'}`}
+            ${isDirty ? 'border-amber-400 focus:ring-amber-200' : 'border-gray-200 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF]/50'}`}
         />
       )}
       {isDirty && (
@@ -285,7 +288,7 @@ interface UnsavedModalProps {
 function UnsavedModal({ dirtyCount, onKeep, onDiscard }: UnsavedModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onKeep} />
+      <div role="button" aria-label="Annuler" tabIndex={0} className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onKeep} onKeyDown={(e) => { if (e.key === 'Escape') onKeep(); }} />
       <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-sm mx-4 p-6">
         <div className="flex items-start gap-3 mb-5">
           <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
@@ -377,8 +380,8 @@ export default function ConformityDetail() {
   useEffect(() => {
     setLoadingBug(true);
     reload();
-    fetch('/api/bugs/meta/areas').then(r => r.json()).then(setAreaPaths).catch(() => {});
-    fetch('/api/bugs/meta/iterations').then(r => r.json()).then(setIterations).catch(() => {});
+    fetch('/api/bugs/meta/areas').then(r => r.json()).then(setAreaPaths).catch((err: unknown) => { console.error('meta/areas', err); });
+    fetch('/api/bugs/meta/iterations').then(r => r.json()).then(setIterations).catch((err: unknown) => { console.error('meta/iterations', err); });
   }, [reload]);
 
   useEffect(() => {
@@ -537,7 +540,7 @@ export default function ConformityDetail() {
                 <a
                   href={`${ADO_BASE}${bug.id}`}
                   target="_blank" rel="noopener noreferrer"
-                  className="font-mono text-xs font-semibold text-[#1E63B6] hover:underline"
+                  className="font-mono text-xs font-semibold text-[#1E40AF] hover:underline"
                   title="Ouvrir dans Azure DevOps"
                 >
                   #{bug.id} ↗
@@ -745,7 +748,7 @@ export default function ConformityDetail() {
       {/* ── Modal confirmation multi-champs ── */}
       {showConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => !saving && setShowConfirm(false)} />
+          <div role="button" aria-label="Annuler" tabIndex={0} className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => !saving && setShowConfirm(false)} onKeyDown={(e) => { if (e.key === 'Escape' && !saving) setShowConfirm(false); }} />
           <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-lg mx-4 p-6">
             <div className="flex items-start gap-3 mb-5">
               <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
@@ -780,7 +783,7 @@ export default function ConformityDetail() {
               <button onClick={() => setShowConfirm(false)} disabled={saving} className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-50">
                 Annuler
               </button>
-              <button onClick={handleSaveAll} disabled={saving} className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-[#1E63B6] hover:bg-[#0F3E8A] disabled:opacity-50 disabled:cursor-wait">
+              <button onClick={handleSaveAll} disabled={saving} className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-[#1E40AF] hover:bg-[#0F3E8A] disabled:opacity-50 disabled:cursor-wait">
                 {saving ? 'Enregistrement…' : 'Confirmer dans Azure DevOps'}
               </button>
             </div>

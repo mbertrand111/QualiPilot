@@ -99,7 +99,7 @@ export function Layout({ children, title, actions, contentClassName }: LayoutPro
       fetch('/api/health')
         .then(r => r.json())
         .then((d: { last_sync_at?: string | null }) => setLastSyncAt(d.last_sync_at ?? null))
-        .catch(() => {});
+        .catch((err: unknown) => { console.error('health check', err); });
     }
     function onSynced(e: Event) {
       const lastSyncAt = (e as CustomEvent<{ lastSyncAt?: string }>).detail?.lastSyncAt;
@@ -165,7 +165,7 @@ export function Layout({ children, title, actions, contentClassName }: LayoutPro
                   'group flex items-center rounded-xl font-medium transition-colors',
                   collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-3 py-2.5 text-[13px]',
                   active
-                    ? 'bg-[#1E63B6] text-white shadow-md shadow-[#0F3E8A]/60'
+                    ? 'bg-[#1E40AF] text-white shadow-md shadow-[#0F3E8A]/60'
                     : 'text-white/50 hover:bg-white/[0.07] hover:text-white',
                 ].join(' ')}
               >

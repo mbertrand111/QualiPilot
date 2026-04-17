@@ -438,7 +438,7 @@ export default function History() {
               'inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold border transition-colors',
               acking || !hasAutoRows
                 ? 'bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed'
-                : 'bg-white text-[#1E63B6] border-[#1E63B6]/30 hover:bg-blue-50 hover:border-[#1E63B6]',
+                : 'bg-white text-[#1E40AF] border-[#1E40AF]/30 hover:bg-blue-50 hover:border-[#1E40AF]',
             ].join(' ')}
             title="Valider/vider le tableau des corrections automatiques"
           >
@@ -489,7 +489,7 @@ export default function History() {
                       href={`${ADO_BASE}${row.work_item_id}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-[#1E63B6] hover:underline"
+                      className="text-[#1E40AF] hover:underline"
                     >
                       #{row.work_item_id}
                     </a>

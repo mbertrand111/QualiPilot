@@ -170,8 +170,8 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
     </svg>
   );
   return dir === 'asc'
-    ? <svg className="w-3 h-3 text-[#1E63B6] ml-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
-    : <svg className="w-3 h-3 text-[#1E63B6] ml-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>;
+    ? <svg className="w-3 h-3 text-[#1E40AF] ml-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
+    : <svg className="w-3 h-3 text-[#1E40AF] ml-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>;
 }
 
 const STATE_STYLES: Record<string, string> = {
@@ -203,7 +203,7 @@ function Th({ col, label, sort, dir, onSort, className = '' }: ThProps) {
   return (
     <th
       onClick={() => onSort(col)}
-      className={`text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide cursor-pointer select-none whitespace-nowrap ${active ? 'text-[#1E63B6]' : 'text-gray-400 hover:text-gray-600'} ${className}`}
+      className={`text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide cursor-pointer select-none whitespace-nowrap ${active ? 'text-[#1E40AF]' : 'text-gray-400 hover:text-gray-600'} ${className}`}
     >
       <span className="flex items-center">
         {label}
@@ -320,7 +320,7 @@ function SaveConfirmModal({ dirtyFields, loading, onConfirm, onCancel }: SaveCon
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
+      <div role="button" aria-label="Annuler" tabIndex={0} className="absolute inset-0 bg-black/40" onClick={onCancel} onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }} />
       <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-lg mx-4 p-6 max-h-[80vh] flex flex-col">
         <div className="flex items-start gap-3 mb-5 shrink-0">
           <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
@@ -349,7 +349,7 @@ function SaveConfirmModal({ dirtyFields, loading, onConfirm, onCancel }: SaveCon
             <tbody>
               {dirtyFields.map((f, i) => (
                 <tr key={`${f.bugId}-${f.key}`} className="border-b border-gray-50">
-                  <td className="py-2 pr-4 font-mono text-[12px] text-[#1E63B6] font-semibold whitespace-nowrap">
+                  <td className="py-2 pr-4 font-mono text-[12px] text-[#1E40AF] font-semibold whitespace-nowrap">
                     {i === 0 || dirtyFields[i - 1].bugId !== f.bugId ? `#${f.bugId}` : ''}
                   </td>
                   <td className="py-2 pr-4 text-gray-500 font-medium whitespace-nowrap">{f.label}</td>
@@ -378,7 +378,7 @@ function SaveConfirmModal({ dirtyFields, loading, onConfirm, onCancel }: SaveCon
           <button
             onClick={onConfirm}
             disabled={loading}
-            className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-[#1E63B6] hover:bg-[#0F3E8A] disabled:opacity-50 disabled:cursor-wait"
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-[#1E40AF] hover:bg-[#0F3E8A] disabled:opacity-50 disabled:cursor-wait"
           >
             {loading ? 'Enregistrement…' : 'Enregistrer dans ADO'}
           </button>
@@ -438,8 +438,8 @@ export default function Conformity() {
   const [bulkError, setBulkError]   = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/bugs/meta/sprints').then(r => r.json()).then(setSprints).catch(() => {});
-    fetch('/api/bugs/meta/areas').then(r => r.json()).then(setAreaPaths).catch(() => {});
+    fetch('/api/bugs/meta/sprints').then(r => r.json()).then(setSprints).catch((err: unknown) => { console.error('meta/sprints', err); });
+    fetch('/api/bugs/meta/areas').then(r => r.json()).then(setAreaPaths).catch((err: unknown) => { console.error('meta/areas', err); });
   }, []);
 
   const load = useCallback(async (p: number) => {
@@ -695,7 +695,7 @@ export default function Conformity() {
                 <button
                   key={rule_code}
                   onClick={() => setFilterRules(prev => prev.includes(rule_code) ? prev.filter(r => r !== rule_code) : [...prev, rule_code])}
-                  className={`flex items-center gap-2 rounded-xl px-3 py-1.5 border text-[11px] font-semibold transition-colors ${filterRules.includes(rule_code) ? 'bg-[#1E63B6] text-white border-[#1E63B6]' : 'bg-white text-gray-700 border-gray-200 hover:border-[#1E63B6] hover:text-[#1E63B6]'}`}
+                  className={`flex items-center gap-2 rounded-xl px-3 py-1.5 border text-[11px] font-semibold transition-colors ${filterRules.includes(rule_code) ? 'bg-[#1E40AF] text-white border-[#1E40AF]' : 'bg-white text-gray-700 border-gray-200 hover:border-[#1E40AF] hover:text-[#1E40AF]'}`}
                   title={`Filtrer par règle ${rule_code}`}
                 >
                   <span className="font-mono">{rule_code}</span>
@@ -759,7 +759,7 @@ export default function Conformity() {
                 placeholder={label}
                 value={value}
                 onChange={e => set(e.target.value)}
-                className="text-sm border border-gray-200 rounded-lg pl-3 pr-7 py-2 bg-white text-[#2B2B2B] placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#66D2DB]/40 w-52"
+                className="text-sm border border-gray-200 rounded-lg pl-3 pr-7 py-2 bg-white text-[#2B2B2B] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#66D2DB]/40 w-52"
               />
               {value && (
                 <button onClick={() => set('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-lg leading-none">×</button>
@@ -785,7 +785,7 @@ export default function Conformity() {
                       checked={allSelected}
                       ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
                       onChange={toggleAll}
-                      className="rounded border-gray-300 text-[#1E63B6] focus:ring-[#1E63B6]/30 cursor-pointer"
+                      className="rounded border-gray-300 text-[#1E40AF] focus:ring-[#1E40AF]/30 cursor-pointer"
                     />
                   </th>
                   <Th col="bug_id"            label="ID"               sort={sort} dir={dir} onSort={handleSort} />
@@ -838,12 +838,12 @@ export default function Conformity() {
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleOne(v.bug_id)}
-                          className="rounded border-gray-300 text-[#1E63B6] focus:ring-[#1E63B6]/30 cursor-pointer"
+                          className="rounded border-gray-300 text-[#1E40AF] focus:ring-[#1E40AF]/30 cursor-pointer"
                         />
                       </td>
 
                       {/* ID */}
-                      <td className="px-4 py-3 font-mono text-[12px] text-[#1E63B6] font-semibold whitespace-nowrap">
+                      <td className="px-4 py-3 font-mono text-[12px] text-[#1E40AF] font-semibold whitespace-nowrap">
                         <a
                           href={`https://dev.azure.com/Isagri-Prod-Progiciels/Isagri_Dev_GC_GestionCommerciale/_workitems/edit/${v.bug_id}`}
                           target="_blank" rel="noopener noreferrer"
@@ -929,7 +929,7 @@ export default function Conformity() {
                       <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                         <Link
                           to={`/conformity/${v.bug_id}`}
-                          className="text-xs font-bold text-[#1E63B6] hover:text-[#0F3E8A] opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="text-xs font-bold text-[#1E40AF] hover:text-[#0F3E8A] opacity-0 group-hover:opacity-100 transition-opacity"
                           title="Voir le détail"
                         >
                           →
@@ -1001,7 +1001,7 @@ export default function Conformity() {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[#0e1a38] text-white rounded-2xl shadow-2xl border border-white/10 px-5 py-3.5 flex items-center gap-4 min-w-[560px] max-w-2xl">
           {/* Compteur */}
           <div className="flex items-center gap-2 shrink-0">
-            <span className="w-6 h-6 rounded-full bg-[#1E63B6] text-[11px] font-bold flex items-center justify-center">
+            <span className="w-6 h-6 rounded-full bg-[#1E40AF] text-[11px] font-bold flex items-center justify-center">
               {selectedIds.size}
             </span>
             <span className="text-sm font-semibold">bug{selectedIds.size > 1 ? 's' : ''} sélectionné{selectedIds.size > 1 ? 's' : ''}</span>
@@ -1064,7 +1064,7 @@ export default function Conformity() {
               value={bulkValue}
               onChange={e => setBulkValue(e.target.value)}
               placeholder="Nouvelle valeur..."
-              className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E63B6]/50 flex-1 min-w-[180px]"
+              className="bg-white border border-white/30 rounded-xl text-sm px-3 py-1.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/50 flex-1 min-w-[180px]"
             />
           )}
 
@@ -1072,7 +1072,7 @@ export default function Conformity() {
           <button
             onClick={requestBulk}
             disabled={savingBulk || !bulkValue}
-            className="shrink-0 px-4 py-1.5 rounded-xl text-sm font-semibold bg-[#1E63B6] hover:bg-[#2a78d6] disabled:opacity-50 disabled:cursor-wait transition-colors"
+            className="shrink-0 px-4 py-1.5 rounded-xl text-sm font-semibold bg-[#1E40AF] hover:bg-[#2a78d6] disabled:opacity-50 disabled:cursor-wait transition-colors"
           >
             {savingBulk ? 'Enregistrement…' : 'Appliquer'}
           </button>

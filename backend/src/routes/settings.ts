@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { getDb } from '../db';
 import {
   getReleaseVersionSettings,
@@ -15,6 +16,24 @@ import {
 import { runConformityCheck } from '../services/conformity';
 import { requireApiKey } from '../middleware/security';
 
+const ReleaseVersionsSchema = z.object({
+  selectedVersions: z.array(z.string()),
+});
+
+const SprintCalendarSchema = z.object({
+  entries: z.array(z.object({
+    id:        z.number(),
+    startDate: z.string(),
+    endDate:   z.string(),
+    active:    z.boolean(),
+  })),
+});
+
+const ConformityRuleSchema = z.object({
+  code:   z.string().min(1, 'code est obligatoire'),
+  active: z.boolean(),
+});
+
 const router = Router();
 
 // GET /api/settings/release-versions
@@ -29,18 +48,14 @@ router.get('/settings/release-versions', (_req, res) => {
 
 // PATCH /api/settings/release-versions
 router.patch('/settings/release-versions', requireApiKey, (req, res) => {
+  const parsed = ReleaseVersionsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Requête invalide' });
+    return;
+  }
   try {
-    const selectedVersions = Array.isArray(req.body?.selectedVersions)
-      ? req.body.selectedVersions.map((v: unknown) => String(v))
-      : null;
-
-    if (selectedVersions === null) {
-      res.status(400).json({ error: 'selectedVersions doit etre un tableau' });
-      return;
-    }
-
     const db = getDb();
-    res.json(updateReleaseVersionSettings(db, selectedVersions));
+    res.json(updateReleaseVersionSettings(db, parsed.data.selectedVersions));
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Unexpected error' });
   }
@@ -58,25 +73,14 @@ router.get('/settings/sprint-calendar', (_req, res) => {
 
 // PATCH /api/settings/sprint-calendar
 router.patch('/settings/sprint-calendar', requireApiKey, (req, res) => {
+  const parsed = SprintCalendarSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Requête invalide' });
+    return;
+  }
   try {
-    const rows = Array.isArray(req.body?.entries) ? req.body.entries : null;
-    if (rows === null) {
-      res.status(400).json({ error: 'entries doit etre un tableau' });
-      return;
-    }
-
-    const updates = rows.map((row: unknown) => {
-      const r = (row ?? {}) as Record<string, unknown>;
-      return {
-        id: Number(r.id),
-        startDate: String(r.startDate ?? ''),
-        endDate: String(r.endDate ?? ''),
-        active: Boolean(r.active),
-      };
-    });
-
     const db = getDb();
-    res.json(updateSprintCalendarSettings(db, updates));
+    res.json(updateSprintCalendarSettings(db, parsed.data.entries));
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Unexpected error' });
   }
@@ -94,19 +98,13 @@ router.get('/settings/conformity-rules', (_req, res) => {
 
 // PATCH /api/settings/conformity-rules
 router.patch('/settings/conformity-rules', requireApiKey, (req, res) => {
+  const parsed = ConformityRuleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Requête invalide' });
+    return;
+  }
   try {
-    const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
-    const active = req.body?.active;
-
-    if (!code) {
-      res.status(400).json({ error: 'code est obligatoire' });
-      return;
-    }
-    if (typeof active !== 'boolean') {
-      res.status(400).json({ error: 'active doit etre un booleen' });
-      return;
-    }
-
+    const { code, active } = parsed.data;
     const db = getDb();
     const payload = updateConformityRuleActive(db, code, active);
 
