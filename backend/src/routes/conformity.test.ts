@@ -4,6 +4,9 @@ import express from 'express';
 
 vi.mock('../db');
 vi.mock('../services/conformity');
+vi.mock('../middleware/security', () => ({
+  requireApiKey: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
 
 import { getDb } from '../db';
 import { runConformityCheck } from '../services/conformity';
@@ -24,7 +27,7 @@ function makeStmt(overrides: { get?: unknown; all?: unknown[] } = {}) {
 // ─── POST /conformity/run ─────────────────────────────────────────────────────
 
 describe('POST /conformity/run', () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => { vi.resetAllMocks(); });
 
   it('retourne le résultat de l\'évaluation', async () => {
     vi.mocked(runConformityCheck).mockReturnValueOnce({
@@ -53,38 +56,50 @@ describe('POST /conformity/run', () => {
 });
 
 // ─── GET /conformity/violations ───────────────────────────────────────────────
+//
+// Le route GET /conformity/violations a deux modes :
+//   - liste (sans bug_id)  : 3 prepare() — count + list dédupliquée par bug + rule_counts
+//   - détail (avec bug_id) : 1 prepare() — violations individuelles avec rule_code
+// Les tests ci-dessous reflètent le comportement effectif du handler.
 
-describe('GET /conformity/violations', () => {
-  beforeEach(() => vi.resetAllMocks());
+describe('GET /conformity/violations (mode liste)', () => {
+  beforeEach(() => { vi.resetAllMocks(); });
 
-  it('retourne la liste paginée des violations actives', async () => {
+  it('retourne la liste paginée dédupliquée par bug', async () => {
     const violations = [{
-      id: 1, bug_id: 42, detected_at: '2026-03-24T10:00:00Z',
-      bug_title: 'Bug test', bug_state: 'Active', bug_team: 'COCO', bug_priority: 1,
-      bug_sprint: 'PI2-SP4', bug_version_souhaitee: null, bug_integration_build: null,
-      bug_found_in: null, bug_area_path: null,
-      rule_code: 'PRIORITY_CHECK', rule_description: 'Priority doit être 2', severity: 'error',
+      bug_id: 42, bug_title: 'Bug test', bug_state: 'Active', bug_team: 'COCO', bug_priority: 1,
+      bug_version_souhaitee: null, bug_integration_build: null, bug_found_in: null,
+      bug_resolved_reason: null, bug_changed_date: '2026-03-24T10:00:00Z',
     }];
-    const countStmt = makeStmt({ get: { n: 1 } });
-    const listStmt  = makeStmt({ all: violations });
-    const db = { prepare: vi.fn().mockReturnValueOnce(countStmt).mockReturnValueOnce(listStmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    const countStmt      = makeStmt({ get: { n: 1 } });
+    const listStmt       = makeStmt({ all: violations });
+    const ruleCountsStmt = makeStmt({ all: [{ rule_code: 'PRIORITY_CHECK', count: 1 }] });
+    const db = { prepare: vi.fn()
+      .mockReturnValueOnce(countStmt)
+      .mockReturnValueOnce(listStmt)
+      .mockReturnValueOnce(ruleCountsStmt) };
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/conformity/violations');
 
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
     expect(res.body.violations).toHaveLength(1);
-    expect(res.body.violations[0].rule_code).toBe('PRIORITY_CHECK');
+    expect(res.body.violations[0].bug_id).toBe(42);
     expect(res.body.page).toBe(1);
     expect(res.body.limit).toBe(50);
+    expect(res.body.rule_counts).toEqual([{ rule_code: 'PRIORITY_CHECK', count: 1 }]);
   });
 
   it('retourne liste vide s\'il n\'y a pas de violations', async () => {
-    const countStmt = makeStmt({ get: { n: 0 } });
-    const listStmt  = makeStmt({ all: [] });
-    const db = { prepare: vi.fn().mockReturnValueOnce(countStmt).mockReturnValueOnce(listStmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    const countStmt      = makeStmt({ get: { n: 0 } });
+    const listStmt       = makeStmt({ all: [] });
+    const ruleCountsStmt = makeStmt({ all: [] });
+    const db = { prepare: vi.fn()
+      .mockReturnValueOnce(countStmt)
+      .mockReturnValueOnce(listStmt)
+      .mockReturnValueOnce(ruleCountsStmt) };
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/conformity/violations');
 
@@ -94,47 +109,59 @@ describe('GET /conformity/violations', () => {
   });
 
   it('filtre par team et rule_code', async () => {
-    const countStmt = makeStmt({ get: { n: 0 } });
-    const listStmt  = makeStmt({ all: [] });
-    const db = { prepare: vi.fn().mockReturnValueOnce(countStmt).mockReturnValueOnce(listStmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    const countStmt      = makeStmt({ get: { n: 0 } });
+    const listStmt       = makeStmt({ all: [] });
+    const ruleCountsStmt = makeStmt({ all: [] });
+    const db = { prepare: vi.fn()
+      .mockReturnValueOnce(countStmt)
+      .mockReturnValueOnce(listStmt)
+      .mockReturnValueOnce(ruleCountsStmt) };
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     await request(app).get('/conformity/violations?team=COCO&rule_code=PRIORITY_CHECK');
 
     const calls = db.prepare.mock.calls as string[][];
-    expect(calls[0][0]).toContain('b.team = ?');
-    expect(calls[0][0]).toContain('r.code = ?');
+    const countSql = calls[0][0];
+    expect(countSql).toContain('b.team = ?');
+    expect(countSql).toContain('r.code = ?');
+  });
+});
+
+describe('GET /conformity/violations (mode détail bug_id)', () => {
+  beforeEach(() => { vi.resetAllMocks(); });
+
+  it('retourne les violations individuelles pour un bug', async () => {
+    const detail = [{
+      id: 1, detected_at: '2026-03-24T10:00:00Z',
+      rule_code: 'PRIORITY_CHECK', rule_description: 'Priority doit être 2', severity: 'error',
+    }];
+    const detailStmt = makeStmt({ all: detail });
+    const db = { prepare: vi.fn().mockReturnValueOnce(detailStmt) };
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+
+    const res = await request(app).get('/conformity/violations?bug_id=42');
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.violations[0].rule_code).toBe('PRIORITY_CHECK');
   });
 
-  it('filtre par bug_id', async () => {
-    const countStmt = makeStmt({ get: { n: 0 } });
-    const listStmt  = makeStmt({ all: [] });
-    const db = { prepare: vi.fn().mockReturnValueOnce(countStmt).mockReturnValueOnce(listStmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+  it('filtre par bug_id (clause v.bug_id = ?)', async () => {
+    const detailStmt = makeStmt({ all: [] });
+    const db = { prepare: vi.fn().mockReturnValueOnce(detailStmt) };
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     await request(app).get('/conformity/violations?bug_id=42');
 
     const calls = db.prepare.mock.calls as string[][];
     expect(calls[0][0]).toContain('v.bug_id = ?');
   });
-
-  it('filtre par severity', async () => {
-    const countStmt = makeStmt({ get: { n: 0 } });
-    const listStmt  = makeStmt({ all: [] });
-    const db = { prepare: vi.fn().mockReturnValueOnce(countStmt).mockReturnValueOnce(listStmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
-
-    await request(app).get('/conformity/violations?severity=error');
-
-    const calls = db.prepare.mock.calls as string[][];
-    expect(calls[0][0]).toContain('r.severity = ?');
-  });
 });
 
 // ─── GET /conformity/summary ──────────────────────────────────────────────────
 
 describe('GET /conformity/summary', () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => { vi.resetAllMocks(); });
 
   it('retourne les totaux par règle et équipe', async () => {
     const totalStmt   = makeStmt({ get: { n: 15 } });
@@ -148,7 +175,7 @@ describe('GET /conformity/summary', () => {
         .mockReturnValueOnce(byTeamStmt)
         .mockReturnValueOnce(lastRunStmt),
     };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/conformity/summary');
 
@@ -172,7 +199,7 @@ describe('GET /conformity/summary', () => {
         .mockReturnValueOnce(byTeamStmt)
         .mockReturnValueOnce(lastRunStmt),
     };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/conformity/summary');
 

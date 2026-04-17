@@ -50,9 +50,21 @@ npm run setup && npm run dev
 | `npm run setup` | Installe toutes les dépendances |
 | `npm run dev` | Lance backend + frontend en parallèle |
 | `npm run test` | Lance tous les tests |
+| `npm run test:e2e` | Lance les tests end-to-end Playwright |
 | `npm run build` | Build de production |
 | `npm run lint` | Vérifie les types TypeScript |
 | `npm run clean` | Supprime node_modules et artefacts |
+
+---
+
+## Variables d'environnement
+
+Le fichier `.env.example` contient la liste complète. Variables clés :
+
+- `PORT_BACKEND`, `PORT_FRONTEND`, `DATABASE_PATH`
+- `ADO_PAT`, `ADO_ORG`, `ADO_PROJECT`, `ADO_BASE_URL`
+- `QUALIPILOT_WRITE_API_KEY` (optionnel mais recommandé) : active une protection par clé API sur les routes d'écriture (`POST`/`PATCH` sensibles).  
+  Si vide, le comportement reste backward-compatible (pas de blocage).
 
 ---
 

@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { getDb } from '../db';
 import { runConformityCheck } from '../services/conformity';
+import { requireApiKey } from '../middleware/security';
 
 const router = Router();
 
 // POST /api/conformity/run
-router.post('/conformity/run', (_req, res) => {
+router.post('/conformity/run', requireApiKey, (_req, res) => {
   try {
     const result = runConformityCheck();
     res.json(result);
@@ -16,7 +17,7 @@ router.post('/conformity/run', (_req, res) => {
 
 // POST /api/conformity/waivers
 // Accepte manuellement une anomalie (bug + règle) pour qu'elle ne remonte plus.
-router.post('/conformity/waivers', (req, res) => {
+router.post('/conformity/waivers', requireApiKey, (req, res) => {
   const db = getDb();
   const bugIdRaw = req.body?.bug_id;
   const ruleCode = typeof req.body?.rule_code === 'string' ? req.body.rule_code.trim() : '';

@@ -346,6 +346,7 @@ Les bugs dans "Bugs à corriger" doivent être dans le bon sous-dossier selon le
 | `ADO_ORG` | Organisation ADO | `isagri` |
 | `ADO_PROJECT` | Projet ADO | `Isagri_Dev_GC_GestionCommerciale` |
 | `ADO_BASE_URL` | URL de base ADO | `https://dev.azure.com` |
+| `QUALIPILOT_WRITE_API_KEY` | Clé API optionnelle pour protéger les routes write (`POST/PATCH`) | `votre-cle-secrete` |
 
 ---
 

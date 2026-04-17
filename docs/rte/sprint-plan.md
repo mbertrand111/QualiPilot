@@ -10,7 +10,7 @@ Développement solo, itératif. Une étape à la fois, toujours testée et fonct
 - [ ] Créer `backend/src/db/index.ts` (connexion + migrations au démarrage)
 - [ ] Créer `backend/src/db/schema.sql`
 - [ ] Installer Tailwind CSS dans le frontend
-- [ ] Nettoyer `Home.tsx` (supprimer les références hackathon)
+- [ ] Nettoyer `Home.tsx` (supprimer les références obsolètes)
 - [ ] Supprimer `backend/src/services/openai.ts` et sa dépendance (non utilisé)
 
 ## Étape 1 — Ingrédients (CRUD)

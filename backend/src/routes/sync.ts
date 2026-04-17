@@ -4,10 +4,11 @@ import { runAutoRemediation } from '../services/autoRemediation';
 import { AdoError } from '../services/azureDevOps';
 import { captureKpiTeamBacklogSnapshotIfDue } from '../services/kpiHistory';
 import logger from '../logger';
+import { requireApiKey } from '../middleware/security';
 
 const router = Router();
 
-router.post('/sync', async (_req, res) => {
+router.post('/sync', requireApiKey, async (_req, res) => {
   try {
     const syncResult = await runSync();
     let autoRemediation: unknown = null;

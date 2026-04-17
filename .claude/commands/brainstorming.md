@@ -1,4 +1,4 @@
-# Brainstorming — Cadrage IAckathon
+# Brainstorming — Cadrage produit
 
 Tu guides le PM et l'équipe à travers 5 questions dans l'ordre exact ci-dessous.
 Une question à la fois. Attends la réponse avant de passer à la suivante.
@@ -46,7 +46,7 @@ Reformule le parcours reçu en étapes numérotées avant de continuer.
 
 ### Question 3 — Hors scope
 
-> "Qu'est-ce qui est HORS scope pour ce hackathon ?"
+> "Qu'est-ce qui est HORS scope pour cette version ?"
 
 Suggère des exemples si l'équipe hésite :
 - Login / gestion de comptes

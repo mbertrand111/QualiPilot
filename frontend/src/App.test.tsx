@@ -9,8 +9,8 @@ beforeEach(() => {
 });
 
 describe('App', () => {
-  it('renders the hackathon title', () => {
+  it('renders the application title', () => {
     render(<App />);
-    expect(screen.getByText('IAckathon 2026')).toBeInTheDocument();
+    expect(screen.getByText('QualiPilot')).toBeInTheDocument();
   });
 });

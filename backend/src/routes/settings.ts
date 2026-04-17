@@ -13,6 +13,7 @@ import {
   updateConformityRuleActive,
 } from '../services/conformityRuleSettings';
 import { runConformityCheck } from '../services/conformity';
+import { requireApiKey } from '../middleware/security';
 
 const router = Router();
 
@@ -27,7 +28,7 @@ router.get('/settings/release-versions', (_req, res) => {
 });
 
 // PATCH /api/settings/release-versions
-router.patch('/settings/release-versions', (req, res) => {
+router.patch('/settings/release-versions', requireApiKey, (req, res) => {
   try {
     const selectedVersions = Array.isArray(req.body?.selectedVersions)
       ? req.body.selectedVersions.map((v: unknown) => String(v))
@@ -56,7 +57,7 @@ router.get('/settings/sprint-calendar', (_req, res) => {
 });
 
 // PATCH /api/settings/sprint-calendar
-router.patch('/settings/sprint-calendar', (req, res) => {
+router.patch('/settings/sprint-calendar', requireApiKey, (req, res) => {
   try {
     const rows = Array.isArray(req.body?.entries) ? req.body.entries : null;
     if (rows === null) {
@@ -92,7 +93,7 @@ router.get('/settings/conformity-rules', (_req, res) => {
 });
 
 // PATCH /api/settings/conformity-rules
-router.patch('/settings/conformity-rules', (req, res) => {
+router.patch('/settings/conformity-rules', requireApiKey, (req, res) => {
   try {
     const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
     const active = req.body?.active;

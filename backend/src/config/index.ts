@@ -7,6 +7,9 @@ dotenvConfig({ path: resolve(__dirname, '../../../.env') });
 export const config = {
   port:         Number(process.env.PORT_BACKEND ?? 3001),
   databasePath: process.env.DATABASE_PATH ?? './qualipilot.db',
+  api: {
+    writeApiKey: process.env.QUALIPILOT_WRITE_API_KEY ?? '',
+  },
   ado: {
     pat:     process.env.ADO_PAT     ?? '',
     org:     process.env.ADO_ORG     ?? '',

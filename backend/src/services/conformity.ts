@@ -110,16 +110,18 @@ function isValidFahVersionFormat(v: string): boolean {
 }
 
 function isValidOnPremisePatchFormat(v: string): boolean {
-  // Format Patch OnPremise : "13.87.xxx Patch N" - xxx multiple de 50, N obligatoire
-  const m = v.match(/^13\.87\.(\d+)\s+Patch\s+(\d+)$/i);
+  // Format Patch OnPremise : "13.86.xxx Patch N" ou "13.87.xxx Patch N"
+  // xxx doit être un multiple de 50 (inclut les multiples de 100), N obligatoire
+  const m = v.match(/^13\.(86|87)\.(\d+)\s+Patch\s+(\d+)$/i);
   if (!m) return false;
-  return parseInt(m[1], 10) % 50 === 0;
+  return parseInt(m[2], 10) % 50 === 0;
 }
 function isValidOnPremiseMajorFormat(v: string): boolean {
-  // Format OnPremise standard : "13.87.xxx" - xxx multiple de 50
-  const m = v.match(/^13\.87\.(\d+)$/);
+  // Format OnPremise standard : "13.86.xxx" ou "13.87.xxx"
+  // xxx doit être un multiple de 50 (inclut les multiples de 100)
+  const m = v.match(/^13\.(86|87)\.(\d+)$/);
   if (!m) return false;
-  return parseInt(m[1], 10) % 50 === 0;
+  return parseInt(m[2], 10) % 50 === 0;
 }
 
 function foundInYear(foundIn: string): number | null {
@@ -238,6 +240,9 @@ export function evalVersionCheck(bug: BugRow): boolean {
   if (!v) return false; // vide = OK pour ce check
   if (VERSION_SPECIAL_OK.has(v)) return false;
   if (v.includes('Isasite')) return false;
+  // Temporary tolerance: for New/Active bugs, allow 13.87.XXX in version_souhaitee.
+  // Keep patch numeric if present.
+  if (ACTIVE_STATES.has(t(bug.state)) && t(bug.found_in).startsWith('13.') && /^13\.87\.\d+(?:\s+Patch\s+\d+)?$/i.test(v)) return false;
 
   const foundIn = t(bug.found_in);
   if (!foundIn) return false; // sans found_in on ne peut pas déterminer le type → skip
@@ -251,9 +256,9 @@ export function evalVersionCheck(bug: BugRow): boolean {
     if (isValidFahVersionFormat(v)) return false;
     // Legacy on-premise 12.x accepted.
     if (/^12\.\d+(?:\.\d+)?$/.test(v)) return false;
-    // Format OnPremise standard valide : "13.87.xxx" avec xxx multiple de 50
+    // Format OnPremise standard valide : "13.86.xxx" / "13.87.xxx" avec xxx multiple de 50
     if (isValidOnPremiseMajorFormat(v)) return false;
-    // Format Patch OnPremise valide : "13.87.xxx Patch N" (xxx multiple de 50)
+    // Format Patch OnPremise valide : "13.86.xxx Patch N" / "13.87.xxx Patch N" (xxx multiple de 50)
     // Patch/build consistency is checked by VERSION_BUILD_COHERENCE.
     if (isValidOnPremisePatchFormat(v)) return false;
     return true;
@@ -325,7 +330,8 @@ export function evalVersionBuildCoherence(bug: BugRow): boolean {
     return !(b.startsWith(`${year}.${minor}.`) && b.endsWith(`-${patchNum}`));
   }
 
-  // Format Patch OnPremise : "13.87.xxx Patch N" → build doit commencer par "13.87.xxx" et finir par "-N"
+  // Format Patch OnPremise : "13.86.xxx Patch N" / "13.87.xxx Patch N"
+  // → build doit commencer par "13.86.xxx" ou "13.87.xxx" et finir par "-N"
   const onpremisePatchMatch = v.match(/^(\d+\.\d+\.\d+)\s+Patch\s+(\d+)$/i);
   if (onpremisePatchMatch) {
     const base     = onpremisePatchMatch[1]; // ex: "13.87.150"

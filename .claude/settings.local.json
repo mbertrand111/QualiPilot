@@ -14,7 +14,10 @@
       "Bash(ls /c/_git/QualiPilot/*.db)",
       "Bash(ls /c/_git/QualiPilot/backend/*.db)",
       "Bash(npm --prefix frontend run lint)",
-      "Bash(npm --prefix backend run lint)"
+      "Bash(npm --prefix backend run lint)",
+      "Bash(node -e \"require\\('better-sqlite3'\\)\")",
+      "Read(//c/c/_git/QualiPilot/docs/**)",
+      "Read(//c/c/_git/QualiPilot/backend/src/routes/**)"
     ]
   }
 }

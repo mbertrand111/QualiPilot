@@ -21,7 +21,7 @@ app.use('/', writeRouter);
 // ─── PATCH /bugs/:id/fields ───────────────────────────────────────────────────
 
 describe('PATCH /bugs/:id/fields', () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => { vi.resetAllMocks(); });
 
   it('met à jour un champ et retourne le résultat', async () => {
     vi.mocked(writeField).mockResolvedValueOnce({
@@ -96,7 +96,7 @@ describe('PATCH /bugs/:id/fields', () => {
 // ─── POST /bugs/bulk-fields ───────────────────────────────────────────────────
 
 describe('POST /bugs/bulk-fields', () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => { vi.resetAllMocks(); });
 
   it('met à jour plusieurs bugs et retourne le résumé', async () => {
     vi.mocked(bulkWriteField).mockResolvedValueOnce({ updated: 3, failed: [] });

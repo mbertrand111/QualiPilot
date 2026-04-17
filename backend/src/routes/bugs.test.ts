@@ -24,7 +24,7 @@ function makeDb(overrides: Record<string, unknown> = {}) {
 // ─── GET /bugs ─────────────────────────────────────────────────────────────────
 
 describe('GET /bugs', () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => { vi.resetAllMocks(); });
 
   it('retourne la liste des bugs avec pagination', async () => {
     const bugs = [
@@ -36,7 +36,7 @@ describe('GET /bugs', () => {
     const countStmt = { get: vi.fn(() => ({ n: 1 })), all: vi.fn(), run: vi.fn() };
     const bugsStmt  = { get: vi.fn(), all: vi.fn(() => bugs), run: vi.fn() };
     const db = { prepare: vi.fn().mockReturnValueOnce(countStmt).mockReturnValueOnce(bugsStmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs');
 
@@ -52,7 +52,7 @@ describe('GET /bugs', () => {
     const countStmt = { get: vi.fn(() => ({ n: 0 })), all: vi.fn(), run: vi.fn() };
     const bugsStmt  = { get: vi.fn(), all: vi.fn(() => []), run: vi.fn() };
     const db = { prepare: vi.fn().mockReturnValueOnce(countStmt).mockReturnValueOnce(bugsStmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs');
 
@@ -65,7 +65,7 @@ describe('GET /bugs', () => {
     const countStmt = { get: vi.fn(() => ({ n: 0 })), all: vi.fn(), run: vi.fn() };
     const bugsStmt  = { get: vi.fn(), all: vi.fn(() => []), run: vi.fn() };
     const db = { prepare: vi.fn().mockReturnValueOnce(countStmt).mockReturnValueOnce(bugsStmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs?team=COCO,PIXELS&state=New,Active&sprint=PI2-SP4');
 
@@ -81,7 +81,7 @@ describe('GET /bugs', () => {
     const countStmt = { get: vi.fn(() => ({ n: 0 })), all: vi.fn(), run: vi.fn() };
     const bugsStmt  = { get: vi.fn(), all: vi.fn(() => []), run: vi.fn() };
     const db = { prepare: vi.fn().mockReturnValueOnce(countStmt).mockReturnValueOnce(bugsStmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs?title=crash&version=26&found_in=24.10&build=FAH');
 
@@ -97,7 +97,7 @@ describe('GET /bugs', () => {
     const countStmt = { get: vi.fn(() => ({ n: 0 })), all: vi.fn(), run: vi.fn() };
     const bugsStmt  = { get: vi.fn(), all: vi.fn(() => []), run: vi.fn() };
     const db = { prepare: vi.fn().mockReturnValueOnce(countStmt).mockReturnValueOnce(bugsStmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs?sort=; DROP TABLE bugs_cache; --');
 
@@ -111,7 +111,7 @@ describe('GET /bugs', () => {
     const countStmt = { get: vi.fn(() => ({ n: 120 })), all: vi.fn(), run: vi.fn() };
     const bugsStmt  = { get: vi.fn(), all: vi.fn(() => []), run: vi.fn() };
     const db = { prepare: vi.fn().mockReturnValueOnce(countStmt).mockReturnValueOnce(bugsStmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs?page=3&limit=20');
 
@@ -125,12 +125,12 @@ describe('GET /bugs', () => {
 // ─── GET /bugs/meta/teams ──────────────────────────────────────────────────────
 
 describe('GET /bugs/meta/teams', () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => { vi.resetAllMocks(); });
 
   it('retourne la liste des équipes distinctes', async () => {
     const stmt = { get: vi.fn(), all: vi.fn(() => [{ team: 'COCO' }, { team: 'PIXELS' }]), run: vi.fn() };
     const db = { prepare: vi.fn(() => stmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs/meta/teams');
 
@@ -141,7 +141,7 @@ describe('GET /bugs/meta/teams', () => {
   it('retourne un tableau vide si aucune équipe', async () => {
     const stmt = { get: vi.fn(), all: vi.fn(() => []), run: vi.fn() };
     const db = { prepare: vi.fn(() => stmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs/meta/teams');
 
@@ -153,12 +153,12 @@ describe('GET /bugs/meta/teams', () => {
 // ─── GET /bugs/meta/sprints ────────────────────────────────────────────────────
 
 describe('GET /bugs/meta/sprints', () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => { vi.resetAllMocks(); });
 
   it('retourne la liste des sprints distincts', async () => {
     const stmt = { get: vi.fn(), all: vi.fn(() => [{ sprint: 'PI2-SP4' }, { sprint: 'PI3-SP1' }]), run: vi.fn() };
     const db = { prepare: vi.fn(() => stmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs/meta/sprints');
 
@@ -170,7 +170,7 @@ describe('GET /bugs/meta/sprints', () => {
 // ─── GET /bugs/:id/audit ───────────────────────────────────────────────────────
 
 describe('GET /bugs/:id/audit', () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => { vi.resetAllMocks(); });
 
   it('retourne les entrées d\'audit pour un bug', async () => {
     const entries = [
@@ -179,7 +179,7 @@ describe('GET /bugs/:id/audit', () => {
     ];
     const stmt = { get: vi.fn(), all: vi.fn(() => entries), run: vi.fn() };
     const db = { prepare: vi.fn(() => stmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs/42/audit');
 
@@ -192,7 +192,7 @@ describe('GET /bugs/:id/audit', () => {
   it('retourne un tableau vide si aucun audit', async () => {
     const stmt = { get: vi.fn(), all: vi.fn(() => []), run: vi.fn() };
     const db = { prepare: vi.fn(() => stmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs/42/audit');
 
@@ -202,7 +202,7 @@ describe('GET /bugs/:id/audit', () => {
 
   it('retourne 400 si l\'ID n\'est pas un entier', async () => {
     const db = makeDb();
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs/abc/audit');
 
@@ -214,7 +214,7 @@ describe('GET /bugs/:id/audit', () => {
 // ─── GET /bugs/:id ─────────────────────────────────────────────────────────────
 
 describe('GET /bugs/:id', () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => { vi.resetAllMocks(); });
 
   it('retourne le bug complet si trouvé', async () => {
     const bug = { id: 42, title: 'Bug critique', state: 'Active', priority: 2,
@@ -226,7 +226,7 @@ describe('GET /bugs/:id', () => {
       filiere: null, raw_json: '{}', last_synced_at: '2026-03-24T09:00:00Z' };
     const stmt = { get: vi.fn(() => bug), all: vi.fn(), run: vi.fn() };
     const db = { prepare: vi.fn(() => stmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs/42');
 
@@ -239,7 +239,7 @@ describe('GET /bugs/:id', () => {
   it('retourne 404 si le bug est introuvable', async () => {
     const stmt = { get: vi.fn(() => undefined), all: vi.fn(), run: vi.fn() };
     const db = { prepare: vi.fn(() => stmt) };
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs/9999');
 
@@ -249,7 +249,7 @@ describe('GET /bugs/:id', () => {
 
   it('retourne 400 si l\'ID n\'est pas un entier', async () => {
     const db = makeDb();
-    vi.mocked(getDb).mockReturnValue(db as ReturnType<typeof getDb>);
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
 
     const res = await request(app).get('/bugs/not-a-number');
 

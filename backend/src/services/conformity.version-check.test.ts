@@ -30,9 +30,21 @@ describe('VERSION_CHECK OnPremise format', () => {
     )).toBe(false);
   });
 
+  it('accepts plain 13.86.xxx when xxx is a multiple of 50', () => {
+    expect(evalVersionCheck(
+      bug({ found_in: '13.86.700', version_souhaitee: '13.86.750' }),
+    )).toBe(false);
+  });
+
   it('flags 13.87.xxx when xxx is not a multiple of 50', () => {
     expect(evalVersionCheck(
       bug({ found_in: '13.87.200', version_souhaitee: '13.87.230' }),
+    )).toBe(true);
+  });
+
+  it('flags 13.86.xxx when xxx is not a multiple of 50', () => {
+    expect(evalVersionCheck(
+      bug({ found_in: '13.86.700', version_souhaitee: '13.86.730' }),
     )).toBe(true);
   });
 
@@ -42,9 +54,45 @@ describe('VERSION_CHECK OnPremise format', () => {
     )).toBe(false);
   });
 
+  it('accepts 13.86 patch format with numeric patch id', () => {
+    expect(evalVersionCheck(
+      bug({ found_in: '13.86.700', version_souhaitee: '13.86.750 Patch 7' }),
+    )).toBe(false);
+  });
+
   it('flags patch keyword without numeric patch id', () => {
     expect(evalVersionCheck(
       bug({ found_in: '13.87.200', version_souhaitee: '13.87.300 Patch V7' }),
+    )).toBe(true);
+  });
+
+  it('flags 13.86 patch keyword without numeric patch id', () => {
+    expect(evalVersionCheck(
+      bug({ found_in: '13.86.700', version_souhaitee: '13.86.750 Patch V7' }),
+    )).toBe(true);
+  });
+
+  it('accepts 13.87.xxx for Active when found_in is 13.x', () => {
+    expect(evalVersionCheck(
+      bug({ state: 'Active', found_in: '13.86.700', version_souhaitee: '13.87.230' }),
+    )).toBe(false);
+  });
+
+  it('accepts 13.87.xxx for New when found_in is 13.x', () => {
+    expect(evalVersionCheck(
+      bug({ state: 'New', found_in: '13.87.200', version_souhaitee: '13.87.230' }),
+    )).toBe(false);
+  });
+
+  it('flags 13.87.xxx for Active when found_in is Live', () => {
+    expect(evalVersionCheck(
+      bug({ state: 'Active', found_in: '26.10', version_souhaitee: '13.87.230' }),
+    )).toBe(true);
+  });
+
+  it('still flags 13.87.xxx for Closed when found_in is Live', () => {
+    expect(evalVersionCheck(
+      bug({ state: 'Closed', found_in: '26.10', version_souhaitee: '13.87.230' }),
     )).toBe(true);
   });
 });

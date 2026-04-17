@@ -5,11 +5,13 @@ import logger from './logger';
 import { runAutoRemediation } from './services/autoRemediation';
 import { captureKpiTeamBacklogSnapshotIfDue } from './services/kpiHistory';
 import { runSync } from './services/sync';
+import { setSecurityHeaders } from './middleware/security';
 
 const app = express();
 const PORT = process.env.PORT_BACKEND ?? 3001;
 
 app.use(express.json());
+app.use(setSecurityHeaders);
 app.use('/api', router);
 
 const AUTO_REMEDIATION_INTERVAL_MS = 15 * 60 * 1000;

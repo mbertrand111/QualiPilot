@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { WRITABLE_FIELDS, writeField, bulkWriteField } from '../services/adoWrite';
 import { AdoError } from '../services/azureDevOps';
+import { requireApiKey } from '../middleware/security';
 
 const router = Router();
 
 // ─── PATCH /api/bugs/:id/fields — mise à jour d'un champ sur un bug ───────────
 
-router.patch('/bugs/:id/fields', async (req, res) => {
+router.patch('/bugs/:id/fields', requireApiKey, async (req, res) => {
   const bugId = parseInt(req.params.id, 10);
   if (isNaN(bugId)) {
     res.status(400).json({ error: 'ID invalide' });
@@ -50,7 +51,7 @@ router.patch('/bugs/:id/fields', async (req, res) => {
 
 // ─── POST /api/bugs/bulk-fields — mise à jour d'un champ sur plusieurs bugs ──
 
-router.post('/bugs/bulk-fields', async (req, res) => {
+router.post('/bugs/bulk-fields', requireApiKey, async (req, res) => {
   const { ids, field, value } = req.body as { ids?: unknown; field?: unknown; value?: unknown };
 
   if (!Array.isArray(ids) || ids.length === 0) {

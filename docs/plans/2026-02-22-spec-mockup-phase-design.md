@@ -1,4 +1,4 @@
-# Design — Phase spec + maquette (IAckathon 2026)
+# Design — Phase spec + maquette (QualiPilot 2026)
 
 **Date :** 2026-02-22
 **Statut :** validé
@@ -50,7 +50,7 @@ T+1h15  Chacun ouvre Claude Code avec sa fiche + la maquette → exécution auto
 
 ## Artefacts produits
 
-### 1. `/project:brainstorming` spécialisé hackathon
+### 1. `/project:brainstorming` spécialisé projet
 
 Séquence de questions fixe dans cet ordre :
 1. Le problème en une phrase (qui souffre de quoi ?)
