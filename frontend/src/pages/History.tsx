@@ -52,6 +52,20 @@ interface TeamBacklogHistoryResponse {
   snapshots: TeamBacklogSnapshot[];
 }
 
+interface ManualFixSummaryRow {
+  team: string;
+  count: number;
+}
+
+interface ManualFixBug {
+  id: number;
+  title: string | null;
+  state: string | null;
+  last_modified_at: string;
+  fields_modified: string[];
+  violations_at_time: string[];
+}
+
 const FALLBACK_TEAM_ORDER = ['COCO', 'GO FAHST', 'JURASSIC BACK', 'MAGIC SYSTEM', 'MELI MELO', 'NULL.REF', 'PIXELS', 'LACE'];
 const TEAM_OBJECTIVES: Record<string, number> = {
   'COCO': 8,
@@ -109,6 +123,20 @@ function buildMockSnapshots(teamOrder: string[]): TeamBacklogSnapshot[] {
   }));
 }
 
+function toIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function defaultDateRange(): { from: string; to: string } {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - 30);
+  return { from: toIsoDate(from), to: toIsoDate(to) };
+}
+
 function fmtDateTime(iso: string): string {
   try {
     return new Date(iso).toLocaleString('fr-FR', {
@@ -151,6 +179,17 @@ export default function History() {
   const [kpiHistoryError, setKpiHistoryError] = useState<string | null>(null);
   const [showMockPreview, setShowMockPreview] = useState(true);
 
+  // Manual fixes par équipe — plage de dates initialisée aux 30 derniers jours
+  const [mfFrom, setMfFrom] = useState(() => defaultDateRange().from);
+  const [mfTo, setMfTo] = useState(() => defaultDateRange().to);
+  const [mfRows, setMfRows] = useState<ManualFixSummaryRow[]>([]);
+  const [mfLoading, setMfLoading] = useState(false);
+  const [mfError, setMfError] = useState<string | null>(null);
+  const [mfModalTeam, setMfModalTeam] = useState<string | null>(null);
+  const [mfDetailBugs, setMfDetailBugs] = useState<ManualFixBug[]>([]);
+  const [mfDetailLoading, setMfDetailLoading] = useState(false);
+  const [mfDetailError, setMfDetailError] = useState<string | null>(null);
+
   const hasAutoRows = autoRows.length > 0;
 
   const loadAutoFixes = useCallback(async () => {
@@ -184,10 +223,54 @@ export default function History() {
     }
   }, []);
 
+  const loadManualFixes = useCallback(async (from: string, to: string) => {
+    setMfLoading(true);
+    setMfError(null);
+    try {
+      const res = await fetch(`/api/stats/manual-fixes/summary?from=${from}&to=${to}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error ?? `Erreur ${res.status}`);
+      }
+      const data = (await res.json()) as { rows: ManualFixSummaryRow[] };
+      setMfRows(Array.isArray(data.rows) ? data.rows : []);
+    } catch (e) {
+      setMfError(e instanceof Error ? e.message : 'Erreur inconnue');
+    } finally {
+      setMfLoading(false);
+    }
+  }, []);
+
+  const openManualFixesDetail = useCallback(async (team: string) => {
+    setMfModalTeam(team);
+    setMfDetailBugs([]);
+    setMfDetailError(null);
+    setMfDetailLoading(true);
+    try {
+      const res = await fetch(`/api/stats/manual-fixes/detail?from=${mfFrom}&to=${mfTo}&team=${encodeURIComponent(team)}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error ?? `Erreur ${res.status}`);
+      }
+      const data = (await res.json()) as { bugs: ManualFixBug[] };
+      setMfDetailBugs(Array.isArray(data.bugs) ? data.bugs : []);
+    } catch (e) {
+      setMfDetailError(e instanceof Error ? e.message : 'Erreur inconnue');
+    } finally {
+      setMfDetailLoading(false);
+    }
+  }, [mfFrom, mfTo]);
+
   useEffect(() => {
     void loadAutoFixes();
     void loadKpiHistory();
   }, [loadAutoFixes, loadKpiHistory]);
+
+  // Initial load for manual fixes — une seule fois au mount, l'utilisateur rafraichit via le bouton "Appliquer".
+  useEffect(() => {
+    void loadManualFixes(mfFrom, mfTo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const {
     step: syncStep,
@@ -512,6 +595,192 @@ export default function History() {
           </table>
         </div>
       </div>
+
+      {/* ── Section : Bugs modifiés manuellement suite à anomalies ── */}
+      <div className="fade-up fade-up-3 mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <div className="text-sm font-semibold text-[#0e1a38]">Bugs modifiés manuellement suite à anomalies</div>
+            <div className="text-xs text-gray-400 mt-0.5">
+              Nombre de bugs par équipe qui étaient en anomalie et que vous avez corrigés manuellement
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1.5 text-xs text-gray-500">
+              Du
+              <input
+                type="date"
+                value={mfFrom}
+                onChange={(e) => setMfFrom(e.target.value)}
+                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/40"
+              />
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500">
+              au
+              <input
+                type="date"
+                value={mfTo}
+                onChange={(e) => setMfTo(e.target.value)}
+                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/40"
+              />
+            </label>
+            <button
+              onClick={() => loadManualFixes(mfFrom, mfTo)}
+              disabled={mfLoading}
+              className={[
+                'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors',
+                mfLoading
+                  ? 'bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed'
+                  : 'bg-white text-[#1E40AF] border-[#1E40AF]/30 hover:bg-blue-50 hover:border-[#1E40AF]',
+              ].join(' ')}
+            >
+              {mfLoading ? 'Chargement...' : 'Appliquer'}
+            </button>
+          </div>
+        </div>
+
+        {mfError && (
+          <div className="px-5 py-3 text-sm text-red-600 bg-red-50 border-b border-red-100">
+            Erreur: {mfError}
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px]">
+            <thead>
+              <tr className="bg-gray-50/60 border-b border-gray-100">
+                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 text-left">Équipe</th>
+                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 text-right">Bugs modifiés</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {mfLoading && (
+                <tr>
+                  <td colSpan={2} className="px-4 py-10 text-center text-sm text-gray-400">Chargement...</td>
+                </tr>
+              )}
+              {!mfLoading && mfRows.length === 0 && (
+                <tr>
+                  <td colSpan={2} className="px-4 py-10 text-center text-sm text-gray-400">
+                    Aucun bug modifié manuellement sur cette période.
+                  </td>
+                </tr>
+              )}
+              {!mfLoading && mfRows.map((row) => (
+                <tr key={row.team} className="hover:bg-gray-50/50">
+                  <td className="px-4 py-3 text-sm text-gray-700 font-semibold">{row.team}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => openManualFixesDetail(row.team)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-50 border border-[#1E40AF]/20 text-[#1E40AF] font-mono font-semibold text-sm hover:bg-blue-100 hover:border-[#1E40AF]/40 transition-colors"
+                      title="Voir les bugs détaillés"
+                    >
+                      {row.count}
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Modale drill-down manual-fixes ── */}
+      {mfModalTeam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            role="button"
+            aria-label="Fermer"
+            tabIndex={0}
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setMfModalTeam(null)}
+            onKeyDown={(e) => { if (e.key === 'Escape') setMfModalTeam(null); }}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3 shrink-0">
+              <div>
+                <div className="text-sm font-semibold text-[#0e1a38]">
+                  Bugs modifiés — équipe <span className="font-mono text-[#1E40AF]">{mfModalTeam}</span>
+                </div>
+                <div className="text-xs text-gray-400 mt-0.5">Du {mfFrom} au {mfTo}</div>
+              </div>
+              <button
+                onClick={() => setMfModalTeam(null)}
+                className="text-gray-400 hover:text-gray-700 text-2xl leading-none px-2"
+                title="Fermer"
+              >
+                ×
+              </button>
+            </div>
+
+            {mfDetailError && (
+              <div className="px-5 py-3 text-sm text-red-600 bg-red-50 border-b border-red-100 shrink-0">
+                Erreur: {mfDetailError}
+              </div>
+            )}
+
+            <div className="overflow-auto flex-1">
+              <table className="w-full min-w-[720px]">
+                <thead className="sticky top-0 bg-gray-50/80 backdrop-blur">
+                  <tr className="border-b border-gray-100">
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 text-left">ID</th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 text-left">Titre</th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 text-left">État</th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 text-left">Champs modifiés</th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 text-left">Règles violées</th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 text-left">Dernière modif</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {mfDetailLoading && (
+                    <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">Chargement...</td></tr>
+                  )}
+                  {!mfDetailLoading && mfDetailBugs.length === 0 && !mfDetailError && (
+                    <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">Aucun bug trouvé.</td></tr>
+                  )}
+                  {!mfDetailLoading && mfDetailBugs.map((bug) => (
+                    <tr key={bug.id} className="hover:bg-gray-50/50">
+                      <td className="px-4 py-3 text-xs font-mono">
+                        <a
+                          href={`${ADO_BASE}${bug.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#1E40AF] hover:underline font-semibold"
+                        >
+                          #{bug.id}
+                        </a>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-700 max-w-md truncate" title={bug.title ?? ''}>
+                        {bug.title ?? <span className="text-gray-300 italic">(sans titre)</span>}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        <span className="inline-flex px-2 py-0.5 rounded-md border text-[11px] font-semibold bg-gray-100 text-gray-600 border-gray-200">
+                          {bug.state ?? '-'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-600 font-mono">
+                        {bug.fields_modified.length > 0 ? bug.fields_modified.join(', ') : <span className="text-gray-300">-</span>}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-600 font-mono">
+                        {bug.violations_at_time.length > 0
+                          ? bug.violations_at_time.join(', ')
+                          : <span className="text-gray-300">-</span>}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500 font-mono whitespace-nowrap">
+                        {fmtDateTime(bug.last_modified_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

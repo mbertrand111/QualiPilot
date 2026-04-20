@@ -128,3 +128,131 @@ describe('GET /stats/kpi-history', () => {
     expect(res.body).toHaveProperty('error');
   });
 });
+
+// ─── GET /stats/manual-fixes/summary ─────────────────────────────────────────
+
+describe('GET /stats/manual-fixes/summary', () => {
+  beforeEach(() => { vi.resetAllMocks(); });
+
+  it('retourne le résumé par équipe trié par count desc', async () => {
+    const summaryStmt = { get: vi.fn(), all: vi.fn(() => [
+      { team: 'COCO',   count: 5 },
+      { team: 'PIXELS', count: 2 },
+    ]), run: vi.fn() };
+    const db = { prepare: vi.fn(() => summaryStmt) };
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+
+    const res = await request(app).get('/stats/manual-fixes/summary?from=2026-03-01&to=2026-03-31');
+
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toHaveLength(2);
+    expect(res.body.rows[0]).toEqual({ team: 'COCO', count: 5 });
+    expect(res.body.from).toBe('2026-03-01');
+    expect(res.body.to).toBe('2026-03-31');
+  });
+
+  it('passe from et to+1j (borne exclusive) à la requête SQL', async () => {
+    const summaryStmt = { get: vi.fn(), all: vi.fn(() => []), run: vi.fn() };
+    const db = { prepare: vi.fn(() => summaryStmt) };
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+
+    await request(app).get('/stats/manual-fixes/summary?from=2026-03-01&to=2026-03-31');
+
+    // .all(from, toExclusive) — vérifie que toExclusive = 2026-04-01
+    const callArgs = summaryStmt.all.mock.calls[0];
+    expect(callArgs[0]).toBe('2026-03-01');
+    expect(callArgs[1]).toBe('2026-04-01');
+  });
+
+  it('retourne 400 si from est absent', async () => {
+    const res = await request(app).get('/stats/manual-fixes/summary?to=2026-03-31');
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('retourne 400 si from a un format invalide', async () => {
+    const res = await request(app).get('/stats/manual-fixes/summary?from=01/03/2026&to=2026-03-31');
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('retourne une liste vide si aucune modif', async () => {
+    const summaryStmt = { get: vi.fn(), all: vi.fn(() => []), run: vi.fn() };
+    const db = { prepare: vi.fn(() => summaryStmt) };
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+
+    const res = await request(app).get('/stats/manual-fixes/summary?from=2026-03-01&to=2026-03-31');
+
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toEqual([]);
+  });
+
+  it('retourne 500 si erreur SQL', async () => {
+    const db = { prepare: vi.fn(() => { throw new Error('DB crash'); }) };
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+
+    const res = await request(app).get('/stats/manual-fixes/summary?from=2026-03-01&to=2026-03-31');
+
+    expect(res.status).toBe(500);
+    expect(res.body).toHaveProperty('error');
+  });
+});
+
+// ─── GET /stats/manual-fixes/detail ──────────────────────────────────────────
+
+describe('GET /stats/manual-fixes/detail', () => {
+  beforeEach(() => { vi.resetAllMocks(); });
+
+  it('retourne la liste des bugs pour une équipe avec champs et violations splittés', async () => {
+    const detailStmt = { get: vi.fn(), all: vi.fn(() => [
+      {
+        id: 42, title: 'Bug critique', state: 'Active',
+        last_modified_at: '2026-03-24T10:00:00Z',
+        fields_modified: 'priority,version_souhaitee',
+        violations_at_time: 'PRIORITY_CHECK,VERSION_CHECK',
+      },
+      {
+        id: 43, title: null, state: 'Resolved',
+        last_modified_at: '2026-03-20T09:00:00Z',
+        fields_modified: 'integration_build',
+        violations_at_time: null,
+      },
+    ]), run: vi.fn() };
+    const db = { prepare: vi.fn(() => detailStmt) };
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+
+    const res = await request(app).get('/stats/manual-fixes/detail?from=2026-03-01&to=2026-03-31&team=COCO');
+
+    expect(res.status).toBe(200);
+    expect(res.body.team).toBe('COCO');
+    expect(res.body.bugs).toHaveLength(2);
+    expect(res.body.bugs[0].id).toBe(42);
+    expect(res.body.bugs[0].fields_modified).toEqual(['priority', 'version_souhaitee']);
+    expect(res.body.bugs[0].violations_at_time).toEqual(['PRIORITY_CHECK', 'VERSION_CHECK']);
+    expect(res.body.bugs[1].fields_modified).toEqual(['integration_build']);
+    expect(res.body.bugs[1].violations_at_time).toEqual([]);
+  });
+
+  it('retourne 400 si team est absent', async () => {
+    const res = await request(app).get('/stats/manual-fixes/detail?from=2026-03-01&to=2026-03-31');
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('retourne 400 si from/to invalides', async () => {
+    const res = await request(app).get('/stats/manual-fixes/detail?from=invalid&to=2026-03-31&team=COCO');
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('passe team comme 3e param à la requête SQL', async () => {
+    const detailStmt = { get: vi.fn(), all: vi.fn(() => []), run: vi.fn() };
+    const db = { prepare: vi.fn(() => detailStmt) };
+    vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+
+    await request(app).get('/stats/manual-fixes/detail?from=2026-03-01&to=2026-03-31&team=PIXELS');
+
+    const callArgs = detailStmt.all.mock.calls[0];
+    expect(callArgs[2]).toBe('PIXELS');
+  });
+});

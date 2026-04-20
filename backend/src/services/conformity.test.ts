@@ -111,6 +111,12 @@ describe('evalBuildCheck', () => {
 
   it('Closed, build "Build non renseigné*" → traité comme vide → violation',
     () => expect(evalBuildCheck(bug({ state: 'Closed', integration_build: 'Build non renseigné*', created_date: '2025-06-01' }), EMPTY_CFG)).toBe(true));
+
+  it('Closed, version_souhaitee "13.86" (legacy major-only) → no violation même si build vide / placeholder',
+    () => expect(evalBuildCheck(bug({ state: 'Closed', version_souhaitee: '13.86', integration_build: 'Build non renseigné*', created_date: '2025-06-01' }), EMPTY_CFG)).toBe(false));
+
+  it('Closed, version_souhaitee "13.85" (legacy major-only) + build vide → no violation',
+    () => expect(evalBuildCheck(bug({ state: 'Closed', version_souhaitee: '13.85', integration_build: null, created_date: '2025-06-01' }), EMPTY_CFG)).toBe(false));
 });
 
 // ─── VERSION_BUILD_COHERENCE — Live ───────────────────────────────────────────

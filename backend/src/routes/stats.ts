@@ -8,6 +8,16 @@ const AckSchema = z.object({
   ids: z.array(z.number().int().positive()).optional(),
 });
 
+// Plage de dates pour /manual-fixes — from inclusif, to exclusif (fin de journée gérée côté SQL).
+const DateRangeSchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'from doit être au format YYYY-MM-DD'),
+  to:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'to doit être au format YYYY-MM-DD'),
+});
+
+const ManualFixesDetailSchema = DateRangeSchema.extend({
+  team: z.string().min(1, 'team est obligatoire'),
+});
+
 const router = Router();
 
 // GET /api/stats/auto-fixes
@@ -293,6 +303,119 @@ router.get('/stats/triage', (req, res) => {
     corriger_sans_zone:    byTeam['Bugs à corriger']               ?? 0,
     old_6months:           oldBugs,
   });
+});
+
+// GET /api/stats/manual-fixes/summary
+// Résumé par équipe : nombre de bugs modifiés manuellement dans [from, to[ qui avaient une anomalie.
+// Exclusion des corrections auto via LEFT JOIN sur auto_fix_audit (matching work_item_id + field + performed_at).
+router.get('/stats/manual-fixes/summary', (req, res) => {
+  const parsed = DateRangeSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Requête invalide' });
+    return;
+  }
+  const { from, to } = parsed.data;
+  // `to` est inclusif côté UI → on transforme en borne exclusive = lendemain.
+  const toExclusive = new Date(`${to}T00:00:00Z`);
+  toExclusive.setUTCDate(toExclusive.getUTCDate() + 1);
+  const toIso = toExclusive.toISOString().slice(0, 10);
+
+  try {
+    const db = getDb();
+    const rows = db.prepare(`
+      SELECT b.team AS team, COUNT(DISTINCT a.work_item_id) AS count
+      FROM ado_write_audit a
+      JOIN bugs_cache b ON b.id = a.work_item_id
+      LEFT JOIN auto_fix_audit af
+        ON af.work_item_id = a.work_item_id
+       AND af.field = a.field
+       AND af.performed_at = a.performed_at
+      WHERE af.id IS NULL
+        AND a.performed_at >= ?
+        AND a.performed_at < ?
+        AND b.team IS NOT NULL AND b.team <> ''
+        AND EXISTS (
+          SELECT 1 FROM conformity_violations v
+          WHERE v.bug_id = a.work_item_id
+            AND v.detected_at <= a.performed_at
+        )
+      GROUP BY b.team
+      ORDER BY count DESC, b.team ASC
+    `).all(from, toIso) as { team: string; count: number }[];
+
+    res.json({ from, to, rows });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unexpected error' });
+  }
+});
+
+// GET /api/stats/manual-fixes/detail
+// Liste des bugs d'une équipe modifiés manuellement dans [from, to[.
+router.get('/stats/manual-fixes/detail', (req, res) => {
+  const parsed = ManualFixesDetailSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Requête invalide' });
+    return;
+  }
+  const { from, to, team } = parsed.data;
+  const toExclusive = new Date(`${to}T00:00:00Z`);
+  toExclusive.setUTCDate(toExclusive.getUTCDate() + 1);
+  const toIso = toExclusive.toISOString().slice(0, 10);
+
+  try {
+    const db = getDb();
+    const rows = db.prepare(`
+      SELECT
+        a.work_item_id                                  AS id,
+        b.title                                         AS title,
+        b.state                                         AS state,
+        MAX(a.performed_at)                             AS last_modified_at,
+        GROUP_CONCAT(DISTINCT a.field)                  AS fields_modified,
+        (SELECT GROUP_CONCAT(DISTINCT r.code)
+           FROM conformity_violations v
+           JOIN conformity_rules r ON r.id = v.rule_id
+          WHERE v.bug_id = a.work_item_id
+            AND v.detected_at <= MAX(a.performed_at))   AS violations_at_time
+      FROM ado_write_audit a
+      JOIN bugs_cache b ON b.id = a.work_item_id
+      LEFT JOIN auto_fix_audit af
+        ON af.work_item_id = a.work_item_id
+       AND af.field = a.field
+       AND af.performed_at = a.performed_at
+      WHERE af.id IS NULL
+        AND a.performed_at >= ?
+        AND a.performed_at < ?
+        AND b.team = ?
+        AND EXISTS (
+          SELECT 1 FROM conformity_violations v
+          WHERE v.bug_id = a.work_item_id
+            AND v.detected_at <= a.performed_at
+        )
+      GROUP BY a.work_item_id, b.title, b.state
+      ORDER BY last_modified_at DESC
+    `).all(from, toIso, team) as {
+      id: number;
+      title: string | null;
+      state: string | null;
+      last_modified_at: string;
+      fields_modified: string | null;
+      violations_at_time: string | null;
+    }[];
+
+    res.json({
+      from, to, team,
+      bugs: rows.map(r => ({
+        id: r.id,
+        title: r.title,
+        state: r.state,
+        last_modified_at: r.last_modified_at,
+        fields_modified: r.fields_modified ? r.fields_modified.split(',') : [],
+        violations_at_time: r.violations_at_time ? r.violations_at_time.split(',') : [],
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unexpected error' });
+  }
 });
 
 export default router;

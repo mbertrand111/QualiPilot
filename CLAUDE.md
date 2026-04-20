@@ -264,9 +264,12 @@ Tous les bugs doivent être en priorité 2.
 ### VERSION_SOUHAITEE_CHECK
 La "Version souhaitée GC" doit correspondre à un format valide.
 - Format Live : `FAH_xx.yy` — xx = année (25, 26, 27…), yy = multiple de 10 (10, 20, 30…)
-- Format Historique : `13.87.xxx`
+- Format Historique : `13.86.xxx` ou `13.87.xxx` — xxx = tout entier (pas de contrainte de multiple)
+  - Suffixe optionnel `Export` accepté (ex : `13.86.500 Export`)
+  - Suffixe patch accepté : `13.87.300 Patch 2` (numérique uniquement, pas `Patch V7`)
+- **Placeholder `13.87.XXX`** : accepté uniquement si état = `New` ou `Active` ET `Found In` commence par `13.`
+  - Refusé (violation) si état = `Closed` ou `Resolved` — la version doit être renseignée à la clôture
 - Valeurs spéciales acceptées : `Outil Jbeg` · `Sonarqube` · `Isasite` · `Isacuve Web` · `git` · `12.` · `13.8` · `14.` · `-` · `Non concerné`
-- Ciblé sur les bugs actifs uniquement
 
 ### INTEGRATION_BUILD_REQUIRED
 Les bugs fermés (Closed/Resolved) doivent avoir un Integration Build valide et cohérent avec la Version souhaitée.

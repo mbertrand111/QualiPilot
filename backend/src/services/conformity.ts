@@ -110,20 +110,20 @@ function isValidFahVersionFormat(v: string): boolean {
 }
 
 function isValidOnPremisePatchFormat(v: string): boolean {
-  // 13.87.XXX Patch N — tout entier XXX accepté
-  if (/^13\.87\.\d+\s+Patch\s+\d+$/i.test(v)) return true;
-  // 13.86.XXX Patch N — xxx doit être un multiple de 50
-  const m = v.match(/^13\.86\.(\d+)\s+Patch\s+(\d+)$/i);
-  if (!m) return false;
-  return parseInt(m[1], 10) % 50 === 0;
+  return /^13\.8[67]\.\d+\s+Patch\s+\d+$/i.test(v);
 }
+/**
+ * isLegacyMajorOnlyVersion — versions héritage majeur-seul (anciens bugs en base).
+ * Accepte les formats courts `12.x`, `13.x`, ..., `17.x` (avec ou sans mineur, sans subversion).
+ * Ex acceptés : `12.`, `13.86`, `13.87`, `14.`, `17.20`.
+ * Ces valeurs étaient utilisées avant la formalisation du format `13.86.xxx`.
+ */
+function isLegacyMajorOnlyVersion(v: string): boolean {
+  return /^1[2-7]\.\d{0,3}$/.test(v);
+}
+
 function isValidOnPremiseMajorFormat(v: string): boolean {
-  // 13.87.XXX [Export] — tout entier XXX accepté, suffixe "Export" optionnel
-  if (/^13\.87\.\d+(?:\s+Export)?$/i.test(v)) return true;
-  // 13.86.XXX [Export] — xxx doit être un multiple de 50, suffixe "Export" optionnel
-  const m = v.match(/^13\.86\.(\d+)(?:\s+Export)?$/i);
-  if (!m) return false;
-  return parseInt(m[1], 10) % 50 === 0;
+  return /^13\.8[67]\.\d+(?:\s+Export)?$/i.test(v);
 }
 
 function foundInYear(foundIn: string): number | null {
@@ -241,10 +241,11 @@ export function evalVersionCheck(bug: BugRow): boolean {
   const v = t(bug.version_souhaitee);
   if (!v) return false; // vide = OK pour ce check
   if (VERSION_SPECIAL_OK.has(v)) return false;
+  if (isLegacyMajorOnlyVersion(v)) return false; // anciens bugs avec version majeur-seul (ex: "13.86")
   if (v.includes('Isasite')) return false;
-  // Temporary tolerance: for New/Active bugs, allow 13.87.XXX in version_souhaitee.
-  // Keep patch numeric if present.
-  if (ACTIVE_STATES.has(t(bug.state)) && t(bug.found_in).startsWith('13.') && /^13\.87\.\d+(?:\s+Patch\s+\d+)?$/i.test(v)) return false;
+  // New/Active onpremise bugs may use a real version (13.87.300) or the placeholder "13.87.XXX".
+  // Closed/Resolved bugs must have a real version → placeholder stays a violation.
+  if (ACTIVE_STATES.has(t(bug.state)) && t(bug.found_in).startsWith('13.') && /^13\.87\.(?:\d+|XXX)(?:\s+Patch\s+\d+)?$/i.test(v)) return false;
 
   const foundIn = t(bug.found_in);
   if (!foundIn) return false; // sans found_in on ne peut pas déterminer le type → skip
@@ -271,6 +272,8 @@ export function evalVersionCheck(bug: BugRow): boolean {
 /** BUILD_CHECK — bugs Closed/Resolved doivent avoir un build valide */
 export function evalBuildCheck(bug: BugRow, rawConfig: string): boolean {
   if (!CLOSED_STATES.has(t(bug.state))) return false;
+  // Anciens bugs avec version souhaitée majeur-seul (ex: "13.86") — exemption complète.
+  if (isLegacyMajorOnlyVersion(t(bug.version_souhaitee))) return false;
   const raw = t(bug.integration_build);
   // "Build non renseigné*" (placeholder ADO) = équivalent à vide
   const b = raw.toLowerCase().startsWith('build non renseigné') ? '' : raw;

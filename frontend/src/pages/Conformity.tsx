@@ -203,7 +203,7 @@ function Th({ col, label, sort, dir, onSort, className = '' }: ThProps) {
   return (
     <th
       onClick={() => onSort(col)}
-      className={`text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide cursor-pointer select-none whitespace-nowrap ${active ? 'text-[#1E40AF]' : 'text-gray-400 hover:text-gray-600'} ${className}`}
+      className={`text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide cursor-pointer select-none whitespace-nowrap bg-gray-50 ${active ? 'text-[#1E40AF]' : 'text-gray-400 hover:text-gray-600'} ${className}`}
     >
       <span className="flex items-center">
         {label}
@@ -774,12 +774,12 @@ export default function Conformity() {
         {error && <div className="p-6 text-center text-red-600 text-sm">{error}</div>}
 
         {!error && (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto overflow-y-clip">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/60">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-gray-100 bg-gray-50">
                   {/* Checkbox all */}
-                  <th className="px-4 py-3 w-8">
+                  <th className="px-4 py-3 w-8 bg-gray-50">
                     <input
                       type="checkbox"
                       checked={allSelected}
@@ -798,7 +798,7 @@ export default function Conformity() {
                   <Th col="integration_build" label="Build"            sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="version_souhaitee" label="Version souhaitée" sort={sort} dir={dir} onSort={handleSort} />
                   <Th col="changed_date"      label="Modifié"          sort={sort} dir={dir} onSort={handleSort} />
-                  <th className="w-6" />
+                  <th className="w-6 bg-gray-50" />
                 </tr>
               </thead>
               <tbody>
