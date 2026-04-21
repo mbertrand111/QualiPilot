@@ -644,8 +644,39 @@ export default function Conformity() {
   const hasFilters  = filterTeams.length || filterZones.length || filterSprints.length || filterBugTypes.length || filterRules.length || filterStates.length || filterId || filterTitle || filterVersion || filterFoundIn || filterBuild;
   const totalPages  = Math.ceil(total / LIMIT);
 
+  function handleExport() {
+    const params = new URLSearchParams({ sort, dir });
+    if (filterTeams.length)     params.set('team',      filterTeams.join(','));
+    if (filterZones.length)     params.set('zone',      filterZones.join(','));
+    if (filterSprints.length)   params.set('sprint',    filterSprints.join(','));
+    if (filterBugTypes.length)  params.set('bug_type',  filterBugTypes.join(','));
+    if (filterRules.length)     params.set('rule_code', filterRules.join(','));
+    if (filterStates.length)    params.set('state',     filterStates.join(','));
+    if (filterId)               params.set('id',        filterId);
+    if (filterTitle)            params.set('title',     filterTitle);
+    if (filterVersion)          params.set('version',   filterVersion);
+    if (filterFoundIn)          params.set('found_in',  filterFoundIn);
+    if (filterBuild)            params.set('build',     filterBuild);
+    const a = document.createElement('a');
+    a.href = `/api/conformity/violations/export?${params}`;
+    a.download = '';
+    a.click();
+  }
+
   const headerActions = (
-    <SyncButton step={syncStep} onClick={runSync} />
+    <div className="flex items-center gap-2">
+      <button
+        onClick={handleExport}
+        title="Exporter la liste filtrée en Excel"
+        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+        </svg>
+        Excel
+      </button>
+      <SyncButton step={syncStep} onClick={runSync} />
+    </div>
   );
 
   return (

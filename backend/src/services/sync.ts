@@ -37,7 +37,7 @@ const TEAM_NAME_NORMALIZE: Record<string, string> = {
   'NULLREF':       'NULL.REF',
 };
 
-function normalizeTeamName(raw: string): string {
+export function normalizeTeamName(raw: string): string {
   const trimmed = raw.trim();
   const normalizedKey = trimmed
     .toUpperCase()
@@ -52,7 +52,7 @@ function normalizeTeamName(raw: string): string {
 // Ex: "Isagri_Dev_GC_GestionCommerciale\Bugs à corriger\Versions historiques" → "Bugs à corriger OnPremise"
 // Ex: "Isagri_Dev_GC_GestionCommerciale\Bugs à corriger\Hors versions" → "Bugs à corriger Hors versions"
 // Ex: "Isagri_Dev_GC_GestionCommerciale\Bugs à corriger" → "Bugs à corriger"
-function extractTeamFromAreaPath(areaPath: string | null): string | null {
+export function extractTeamFromAreaPath(areaPath: string | null): string | null {
   if (!areaPath) return null;
   const parts = areaPath.split('\\');
   if (parts.length < 2) return null;
@@ -72,7 +72,7 @@ function extractTeamFromAreaPath(areaPath: string | null): string | null {
 // Extrait le sprint depuis l'iteration path, préfixé par l'exercice ou "Archive"
 // Ex: "Isagri_Dev_GC_GestionCommerciale\2025-2026\PI2\PI2-SP4" → "2025-2026 · PI2-SP4"
 //     "Isagri_Dev_GC_GestionCommerciale\Z_Archives\2024-2025\PI5\PI5-SP2" → "Archive · PI5-SP2"
-function extractSprintFromIterationPath(iterationPath: string | null): string | null {
+export function extractSprintFromIterationPath(iterationPath: string | null): string | null {
   if (!iterationPath) return null;
   const sprintMatch = iterationPath.match(/PI\d+(?:-SP\d+)?$/);
   if (!sprintMatch) return null;

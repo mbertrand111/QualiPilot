@@ -1,7 +1,27 @@
 import { Router } from 'express';
+import ExcelJS from 'exceljs';
 import { getDb } from '../db';
 import { runConformityCheck } from '../services/conformity';
 import { requireApiKey } from '../middleware/security';
+
+const ADO_EDIT_BASE = 'https://dev.azure.com/Isagri-Prod-Progiciels/Isagri_Dev_GC_GestionCommerciale/_workitems/edit/';
+
+// Mapping règle → champs en anomalie (pour coloration rouge dans l'export)
+const RULE_TO_FIELDS: Record<string, string[]> = {
+  PRIORITY_CHECK:               ['priority'],
+  VERSION_CHECK:                ['version_souhaitee'],
+  BUILD_CHECK:                  ['integration_build'],
+  INTEGRATION_BUILD_REQUIRED:   ['integration_build'],
+  INTEGRATION_BUILD_NOT_EMPTIED:['integration_build'],
+  VERSION_BUILD_COHERENCE:      ['version_souhaitee', 'integration_build'],
+  CLOSED_BUG_COHERENCE:         ['version_souhaitee', 'integration_build'],
+  NON_CONCERNE_COHERENCE:       ['version_souhaitee', 'integration_build'],
+  FAH_VERSION_REQUIRED:         ['version_souhaitee'],
+  TRIAGE_AREA_CHECK:            ['version_souhaitee', 'integration_build'],
+  CLOSED_BUG_IN_TRIAGE_AREA:    ['version_souhaitee'],
+  AREA_PATH_PRODUCT_COHERENCE:  [],
+  BUGS_TRANSVERSE_AREA:         [],
+};
 
 const router = Router();
 
@@ -213,6 +233,195 @@ router.get('/conformity/violations', (req, res) => {
   `).all(...baseParams) as { rule_code: string; count: number }[];
 
   res.json({ total, page, limit, sort: sortRaw, dir: dir.toLowerCase(), violations, rule_counts });
+});
+
+// GET /api/conformity/violations/export — téléchargement Excel avec filtres + tri courants
+router.get('/conformity/violations/export', (req, res) => {
+  const db = getDb();
+
+  // Mêmes filtres que /conformity/violations
+  const teams     = typeof req.query.team      === 'string' && req.query.team      ? req.query.team.split(',').filter(Boolean)      : [];
+  const zones     = typeof req.query.zone      === 'string' && req.query.zone      ? req.query.zone.split(',').filter(Boolean)      : [];
+  const codes     = typeof req.query.rule_code === 'string' && req.query.rule_code ? req.query.rule_code.split(',').filter(Boolean) : [];
+  const states    = typeof req.query.state     === 'string' && req.query.state     ? req.query.state.split(',').filter(Boolean)     : [];
+  const sprints   = typeof req.query.sprint    === 'string' && req.query.sprint    ? req.query.sprint.split(',').filter(Boolean)    : [];
+
+  const validBugTypes = new Set(['live', 'onpremise', 'hors_version', 'uncategorized']);
+  const bugTypes  = typeof req.query.bug_type  === 'string' && req.query.bug_type
+    ? req.query.bug_type.split(',').filter(v => validBugTypes.has(v)) : [];
+
+  const idContains      = typeof req.query.id       === 'string' ? req.query.id.trim()       : null;
+  const titleContains   = typeof req.query.title    === 'string' ? req.query.title.trim()    : null;
+  const versionContains = typeof req.query.version  === 'string' ? req.query.version.trim()  : null;
+  const foundInContains = typeof req.query.found_in === 'string' ? req.query.found_in.trim() : null;
+  const buildContains   = typeof req.query.build    === 'string' ? req.query.build.trim()    : null;
+
+  const sortRaw = typeof req.query.sort === 'string' ? req.query.sort : 'changed_date';
+  const sortCol = VIOLATION_SORTABLE[sortRaw] ?? 'b.changed_date';
+  const dir     = req.query.dir === 'asc' ? 'ASC' : 'DESC';
+
+  const conditions: string[] = [
+    'v.resolved_at IS NULL',
+    'NOT EXISTS (SELECT 1 FROM conformity_waivers w WHERE w.bug_id = v.bug_id AND w.rule_id = v.rule_id)',
+  ];
+  const params: unknown[] = [];
+
+  if (teams.length === 1)    { conditions.push('b.team = ?');                                      params.push(teams[0]); }
+  else if (teams.length > 1) { conditions.push(`b.team IN (${teams.map(() => '?').join(',')})`);   params.push(...teams); }
+  if (zones.length > 0) {
+    const zoneParts: string[] = [];
+    for (const zone of zones) {
+      for (const candidate of zoneCandidates(zone)) {
+        zoneParts.push('(b.area_path = ? OR b.area_path LIKE ? OR b.area_path LIKE ?)');
+        params.push(candidate, `%\\${candidate}`, `%\\${candidate}\\%`);
+      }
+    }
+    if (zoneParts.length > 0) conditions.push(`(${zoneParts.join(' OR ')})`);
+  }
+  if (states.length === 1)    { conditions.push('b.state = ?');                                     params.push(states[0]); }
+  else if (states.length > 1) { conditions.push(`b.state IN (${states.map(() => '?').join(',')})`); params.push(...states); }
+  if (sprints.length === 1)    { conditions.push('b.sprint = ?');                                    params.push(sprints[0]); }
+  else if (sprints.length > 1) { conditions.push(`b.sprint IN (${sprints.map(() => '?').join(',')})`); params.push(...sprints); }
+  if (bugTypes.length === 1)    { conditions.push('classify_bug(b.version_souhaitee, b.found_in, b.integration_build, b.raison_origine, b.title) = ?');                                              params.push(bugTypes[0]); }
+  else if (bugTypes.length > 1) { conditions.push(`classify_bug(b.version_souhaitee, b.found_in, b.integration_build, b.raison_origine, b.title) IN (${bugTypes.map(() => '?').join(',')})`);        params.push(...bugTypes); }
+  if (idContains)      { conditions.push("CAST(b.id AS TEXT) LIKE ?");  params.push(`%${idContains}%`); }
+  if (titleContains)   { conditions.push('b.title LIKE ?');             params.push(`%${titleContains}%`); }
+  if (versionContains) { conditions.push('b.version_souhaitee LIKE ?'); params.push(`%${versionContains}%`); }
+  if (foundInContains) { conditions.push('b.found_in LIKE ?');          params.push(`%${foundInContains}%`); }
+  if (buildContains)   { conditions.push('b.integration_build LIKE ?'); params.push(`%${buildContains}%`); }
+  if (codes.length === 1)    { conditions.push('r.code = ?');                                      params.push(codes[0]); }
+  else if (codes.length > 1) { conditions.push(`r.code IN (${codes.map(() => '?').join(',')})`);   params.push(...codes); }
+
+  const where = `WHERE ${conditions.join(' AND ')}`;
+
+  const rows = db.prepare(`
+    SELECT
+      b.id               AS bug_id,
+      b.title            AS bug_title,
+      b.state            AS bug_state,
+      b.team             AS bug_team,
+      b.priority         AS bug_priority,
+      b.version_souhaitee AS bug_version_souhaitee,
+      b.integration_build AS bug_integration_build,
+      b.found_in         AS bug_found_in,
+      b.resolved_reason  AS bug_resolved_reason,
+      b.changed_date     AS bug_changed_date,
+      (
+        SELECT GROUP_CONCAT(sub.code, ', ')
+        FROM (
+          SELECT DISTINCT r2.code
+          FROM conformity_violations v2
+          JOIN conformity_rules r2 ON r2.id = v2.rule_id
+          WHERE v2.bug_id = b.id
+            AND v2.resolved_at IS NULL
+            AND NOT EXISTS (SELECT 1 FROM conformity_waivers cw WHERE cw.bug_id = v2.bug_id AND cw.rule_id = v2.rule_id)
+          ORDER BY r2.code
+        ) sub
+      ) AS rule_codes
+    FROM conformity_violations v
+    JOIN bugs_cache b ON b.id = v.bug_id
+    JOIN conformity_rules r ON r.id = v.rule_id
+    ${where}
+    GROUP BY b.id
+    ORDER BY ${sortCol} ${dir}
+  `).all(...params) as {
+    bug_id: number; bug_title: string | null; bug_state: string | null;
+    bug_team: string | null; bug_priority: number | null;
+    bug_version_souhaitee: string | null; bug_integration_build: string | null;
+    bug_found_in: string | null; bug_resolved_reason: string | null;
+    bug_changed_date: string | null; rule_codes: string | null;
+  }[];
+
+  // ─── Excel ───────────────────────────────────────────────────────────────────
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'QualiPilot';
+  wb.created = new Date();
+
+  const ws = wb.addWorksheet('Anomalies', { views: [{ state: 'frozen', ySplit: 1 }] });
+
+  ws.columns = [
+    { header: 'ID',                key: 'id',       width: 10 },
+    { header: 'Titre',             key: 'title',    width: 55 },
+    { header: 'État',              key: 'state',    width: 12 },
+    { header: 'Équipe',            key: 'team',     width: 18 },
+    { header: 'Priorité',         key: 'priority', width: 10 },
+    { header: 'Trouvé dans',       key: 'found_in', width: 18 },
+    { header: 'Raison clôture',    key: 'reason',   width: 20 },
+    { header: 'Build',             key: 'build',    width: 22 },
+    { header: 'Version souhaitée', key: 'version',  width: 24 },
+    { header: 'Règles violées',    key: 'rules',    width: 50 },
+    { header: 'Modifié le',        key: 'modified', width: 18 },
+  ];
+
+  // Style en-tête
+  const headerRow = ws.getRow(1);
+  headerRow.eachCell(cell => {
+    cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+  });
+  headerRow.height = 22;
+
+  const RED_FILL: ExcelJS.Fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE5E5' } };
+  const RED_FONT: Partial<ExcelJS.Font> = { color: { argb: 'FFDC2626' }, bold: true };
+
+  for (const row of rows) {
+    const ruleCodes = (row.rule_codes ?? '').split(',').map(s => s.trim()).filter(Boolean);
+
+    // Champs en anomalie pour cette ligne
+    const badFields = new Set<string>();
+    for (const code of ruleCodes) {
+      for (const field of (RULE_TO_FIELDS[code] ?? [])) badFields.add(field);
+    }
+
+    const modifiedDate = row.bug_changed_date
+      ? new Date(row.bug_changed_date).toLocaleDateString('fr-FR')
+      : '';
+
+    const dataRow = ws.addRow({
+      id:       row.bug_id,
+      title:    row.bug_title ?? '',
+      state:    row.bug_state ?? '',
+      team:     row.bug_team ?? '',
+      priority: row.bug_priority ?? '',
+      found_in: row.bug_found_in ?? '',
+      reason:   row.bug_resolved_reason ?? '',
+      build:    row.bug_integration_build ?? '',
+      version:  row.bug_version_souhaitee ?? '',
+      rules:    row.rule_codes ?? '',
+      modified: modifiedDate,
+    });
+
+    // Lien ADO sur l'ID
+    const idCell = dataRow.getCell('id');
+    idCell.value = { text: `#${row.bug_id}`, hyperlink: `${ADO_EDIT_BASE}${row.bug_id}` };
+    idCell.font  = { color: { argb: 'FF1E40AF' }, underline: true };
+
+    // Coloration rouge des champs en anomalie
+    const fieldToCell: Record<string, string> = {
+      priority:          'priority',
+      version_souhaitee: 'version',
+      integration_build: 'build',
+    };
+    for (const [field, colKey] of Object.entries(fieldToCell)) {
+      if (badFields.has(field)) {
+        const cell = dataRow.getCell(colKey);
+        cell.fill = RED_FILL;
+        cell.font = RED_FONT;
+      }
+    }
+
+    // Ligne alternée légère (sans écraser le rouge)
+    dataRow.eachCell({ includeEmpty: false }, (cell) => {
+      cell.alignment = { wrapText: false, vertical: 'middle' };
+    });
+  }
+
+  const date = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="anomalies_${date}.xlsx"`);
+  wb.xlsx.write(res).then(() => res.end());
 });
 
 // GET /api/conformity/summary

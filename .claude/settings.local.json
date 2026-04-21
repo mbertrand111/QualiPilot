@@ -24,7 +24,8 @@
       "Bash(cat)",
       "Read(//tmp/**)",
       "Bash(xargs grep *)",
-      "Bash(xargs sed *)"
+      "Bash(xargs sed *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}, indent=2\\)\\)\")"
     ]
   }
 }
