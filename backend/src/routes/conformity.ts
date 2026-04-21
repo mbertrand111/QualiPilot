@@ -8,20 +8,82 @@ const ADO_EDIT_BASE = 'https://dev.azure.com/Isagri-Prod-Progiciels/Isagri_Dev_G
 
 // Mapping règle → champs en anomalie (pour coloration rouge dans l'export)
 const RULE_TO_FIELDS: Record<string, string[]> = {
-  PRIORITY_CHECK:               ['priority'],
-  VERSION_CHECK:                ['version_souhaitee'],
-  BUILD_CHECK:                  ['integration_build'],
-  INTEGRATION_BUILD_REQUIRED:   ['integration_build'],
-  INTEGRATION_BUILD_NOT_EMPTIED:['integration_build'],
-  VERSION_BUILD_COHERENCE:      ['version_souhaitee', 'integration_build'],
-  CLOSED_BUG_COHERENCE:         ['version_souhaitee', 'integration_build'],
-  NON_CONCERNE_COHERENCE:       ['version_souhaitee', 'integration_build'],
-  FAH_VERSION_REQUIRED:         ['version_souhaitee'],
-  TRIAGE_AREA_CHECK:            ['version_souhaitee', 'integration_build'],
-  CLOSED_BUG_IN_TRIAGE_AREA:    ['version_souhaitee'],
-  AREA_PATH_PRODUCT_COHERENCE:  [],
-  BUGS_TRANSVERSE_AREA:         [],
+  PRIORITY_CHECK:              ['priority'],
+  VERSION_CHECK:               ['version_souhaitee'],
+  BUILD_CHECK:                 ['integration_build'],
+  VERSION_BUILD_COHERENCE:     ['version_souhaitee', 'integration_build'],
+  CLOSED_BUG_COHERENCE:        ['version_souhaitee', 'integration_build'],
+  FAH_VERSION_REQUIRED:        ['version_souhaitee'],
+  TRIAGE_AREA_CHECK:           ['version_souhaitee', 'integration_build'],
+  NON_CLOSED_TRANSVERSE_AREA:  [],
 };
+
+type ExportBugRow = {
+  bug_version_souhaitee: string | null;
+  bug_state: string | null;
+  bug_found_in: string | null;
+  bug_integration_build: string | null;
+  bug_priority: number | null;
+};
+
+function getRuleExplanation(code: string, row: ExportBugRow): string {
+  const v       = (row.bug_version_souhaitee ?? '').trim();
+  const state   = (row.bug_state ?? '').trim().toLowerCase();
+  const foundIn = (row.bug_found_in ?? '').trim();
+  const build   = (row.bug_integration_build ?? '').trim();
+
+  switch (code) {
+    case 'PRIORITY_CHECK':
+      return `Attendu : Priorité 2 (actuelle : ${row.bug_priority ?? '?'})`;
+
+    case 'VERSION_CHECK': {
+      const isOnPrem = (foundIn.startsWith('13.') && !foundIn.startsWith('13.99')) || foundIn.startsWith('12.');
+      if (isOnPrem) {
+        if (/^13\.87\.XXX/i.test(v) && (state === 'closed' || state === 'resolved'))
+          return 'Version précise requise à la clôture (13.87.XXX interdit)';
+        if (/patch/i.test(v) && !/^13\.8[67]\.\d+\s+Patch\s+\d+$/i.test(v))
+          return 'Format attendu : 13.87.nnn Patch Z (Z numérique)';
+        return 'Format attendu : 13.86.nnn ou 13.87.nnn';
+      }
+      const fahMatch = v.match(/^FAH_\d{2}\.(\d+)/i);
+      if (fahMatch && parseInt(fahMatch[1], 10) % 5 !== 0)
+        return 'Format attendu : FAH_XX.yy (yy = 10, 20, 30…)';
+      if (/FAH_/i.test(v) && /patch/i.test(v))
+        return 'Format attendu : FAH_XX.yy Patch Z';
+      return 'Format attendu : FAH_XX.yy';
+    }
+
+    case 'BUILD_CHECK':
+      if (!build) return "Build d'intégration obligatoire";
+      if (/\b(patch|hotfix|fix|rc|beta|alpha)\b/i.test(build)) return 'Format invalide (mot-clé interdit dans le build)';
+      return 'Build non reconnu (préfixe invalide)';
+
+    case 'VERSION_BUILD_COHERENCE': {
+      const isOnPrem = foundIn.startsWith('13.') && !foundIn.startsWith('13.99');
+      if (isOnPrem && /^FAH_/i.test(v) && !/\/\s*live/i.test(foundIn))
+        return 'Incohérence produit : Found In OnPremise + version Live (ajouter «/ live» si migré)';
+      if (/patch/i.test(v)) return 'Build incohérent avec le patch de la version souhaitée';
+      return 'Build incohérent avec la version souhaitée';
+    }
+
+    case 'CLOSED_BUG_COHERENCE': {
+      const msgs: string[] = [];
+      if (v && v !== '-') msgs.push('version doit être «-»');
+      if (build && build !== '-') msgs.push('build doit être «-»');
+      return `Bug fermé sans correction : ${msgs.join(' et ')}`;
+    }
+
+    case 'FAH_VERSION_REQUIRED':
+      return 'Found In FAH récent → version souhaitée doit contenir FAH';
+
+    case 'TRIAGE_AREA_CHECK':
+    case 'NON_CLOSED_TRANSVERSE_AREA':
+      return 'Zone ou sous-dossier incohérent avec le type de bug';
+
+    default:
+      return code;
+  }
+}
 
 const router = Router();
 
@@ -340,83 +402,88 @@ router.get('/conformity/violations/export', (req, res) => {
 
   const ws = wb.addWorksheet('Anomalies', { views: [{ state: 'frozen', ySplit: 1 }] });
 
-  ws.columns = [
-    { header: 'ID',                key: 'id',       width: 10 },
-    { header: 'Titre',             key: 'title',    width: 55 },
-    { header: 'État',              key: 'state',    width: 12 },
-    { header: 'Équipe',            key: 'team',     width: 18 },
-    { header: 'Priorité',         key: 'priority', width: 10 },
-    { header: 'Trouvé dans',       key: 'found_in', width: 18 },
-    { header: 'Raison clôture',    key: 'reason',   width: 20 },
-    { header: 'Build',             key: 'build',    width: 22 },
-    { header: 'Version souhaitée', key: 'version',  width: 24 },
-    { header: 'Règles violées',    key: 'rules',    width: 50 },
-    { header: 'Modifié le',        key: 'modified', width: 18 },
-  ];
-
-  // Style en-tête
-  const headerRow = ws.getRow(1);
-  headerRow.eachCell(cell => {
-    cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } };
-    cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
-    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+  // Pré-calcul de toutes les lignes
+  const tableData = rows.map(row => {
+    const ruleCodes = (row.rule_codes ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    const rulesLabel = ruleCodes.map(c => `${c} — ${getRuleExplanation(c, row)}`).join('\n');
+    const modifiedDate = row.bug_changed_date
+      ? new Date(row.bug_changed_date).toLocaleDateString('fr-FR')
+      : '';
+    return {
+      ruleCodes,
+      cells: [
+        row.bug_id,
+        row.bug_title ?? '',
+        row.bug_state ?? '',
+        row.bug_team ?? '',
+        row.bug_priority ?? '',
+        row.bug_found_in ?? '',
+        row.bug_resolved_reason ?? '',
+        row.bug_integration_build ?? '',
+        row.bug_version_souhaitee ?? '',
+        rulesLabel,
+        modifiedDate,
+      ] as (string | number)[],
+    };
   });
-  headerRow.height = 22;
+
+  // Tableau Excel natif (tri/filtre sur chaque colonne)
+  ws.addTable({
+    name: 'Anomalies',
+    ref: 'A1',
+    headerRow: true,
+    totalsRow: false,
+    style: { theme: 'TableStyleMedium2', showRowStripes: true },
+    columns: [
+      { name: 'ID',                filterButton: true },
+      { name: 'Titre',             filterButton: true },
+      { name: 'État',              filterButton: true },
+      { name: 'Équipe',            filterButton: true },
+      { name: 'Priorité',         filterButton: true },
+      { name: 'Trouvé dans',       filterButton: true },
+      { name: 'Raison clôture',    filterButton: true },
+      { name: 'Build',             filterButton: true },
+      { name: 'Version souhaitée', filterButton: true },
+      { name: 'Règles violées',    filterButton: true },
+      { name: 'Modifié le',        filterButton: true },
+    ],
+    rows: tableData.map(r => r.cells),
+  });
+
+  // Largeurs de colonnes
+  [10, 55, 12, 18, 10, 18, 20, 22, 24, 70, 18].forEach((w, i) => {
+    ws.getColumn(i + 1).width = w;
+  });
+  ws.getRow(1).height = 22;
 
   const RED_FILL: ExcelJS.Fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE5E5' } };
   const RED_FONT: Partial<ExcelJS.Font> = { color: { argb: 'FFDC2626' }, bold: true };
 
-  for (const row of rows) {
-    const ruleCodes = (row.rule_codes ?? '').split(',').map(s => s.trim()).filter(Boolean);
+  // Formatage cellule par cellule (après création du tableau)
+  tableData.forEach(({ ruleCodes }, i) => {
+    const row = rows[i];
+    const rowNum = i + 2; // ligne 1 = en-tête
 
-    // Champs en anomalie pour cette ligne
     const badFields = new Set<string>();
     for (const code of ruleCodes) {
       for (const field of (RULE_TO_FIELDS[code] ?? [])) badFields.add(field);
     }
 
-    const modifiedDate = row.bug_changed_date
-      ? new Date(row.bug_changed_date).toLocaleDateString('fr-FR')
-      : '';
-
-    const dataRow = ws.addRow({
-      id:       row.bug_id,
-      title:    row.bug_title ?? '',
-      state:    row.bug_state ?? '',
-      team:     row.bug_team ?? '',
-      priority: row.bug_priority ?? '',
-      found_in: row.bug_found_in ?? '',
-      reason:   row.bug_resolved_reason ?? '',
-      build:    row.bug_integration_build ?? '',
-      version:  row.bug_version_souhaitee ?? '',
-      rules:    row.rule_codes ?? '',
-      modified: modifiedDate,
-    });
-
-    // Lien ADO sur l'ID
-    const idCell = dataRow.getCell('id');
+    // Lien ADO sur l'ID (col 1)
+    const idCell = ws.getCell(rowNum, 1);
     idCell.value = { text: `#${row.bug_id}`, hyperlink: `${ADO_EDIT_BASE}${row.bug_id}` };
     idCell.font  = { color: { argb: 'FF1E40AF' }, underline: true };
 
-    // Coloration rouge des champs en anomalie
-    const fieldToCell: Record<string, string> = {
-      priority:          'priority',
-      version_souhaitee: 'version',
-      integration_build: 'build',
-    };
-    for (const [field, colKey] of Object.entries(fieldToCell)) {
-      if (badFields.has(field)) {
-        const cell = dataRow.getCell(colKey);
-        cell.fill = RED_FILL;
-        cell.font = RED_FONT;
-      }
-    }
+    // Rouge sur les champs en anomalie
+    if (badFields.has('priority'))          { const c = ws.getCell(rowNum, 5); c.fill = RED_FILL; c.font = RED_FONT; }
+    if (badFields.has('integration_build')) { const c = ws.getCell(rowNum, 8); c.fill = RED_FILL; c.font = RED_FONT; }
+    if (badFields.has('version_souhaitee')) { const c = ws.getCell(rowNum, 9); c.fill = RED_FILL; c.font = RED_FONT; }
 
-    // Ligne alternée légère (sans écraser le rouge)
-    dataRow.eachCell({ includeEmpty: false }, (cell) => {
-      cell.alignment = { wrapText: false, vertical: 'middle' };
-    });
-  }
+    // Cellule règles : retour à la ligne, alignement haut
+    const rulesCell = ws.getCell(rowNum, 10);
+    rulesCell.alignment = { wrapText: true, vertical: 'top' };
+    if (ruleCodes.length > 1) ws.getRow(rowNum).height = ruleCodes.length * 16;
+  });
 
   const date = new Date().toISOString().slice(0, 10);
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
