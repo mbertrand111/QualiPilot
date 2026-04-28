@@ -182,24 +182,43 @@ router.get('/stats/kpi-history', (req, res) => {
 });
 
 // GET /api/stats/home
-// Returns open bug counts by type + resolved bugs + total active violations
+// Tableau de bord — agrégats par section :
+//   1. open_bugs : bugs ouverts par type
+//   2. triage    : bugs en zones de triage non assignées
+//   3. resolved_bugs / anomalies / trend_7d : zone de vigilance
+//   4. old_bugs  : bugs ouverts depuis +6 mois, ventilés par type
 router.get('/stats/home', (_req, res) => {
   const db = getDb();
 
-  const rows = db.prepare(`
+  // Section 1 — Bugs ouverts par type
+  const openRows = db.prepare(`
     SELECT classify_bug(version_souhaitee, found_in, integration_build, raison_origine, title) AS bug_type, COUNT(*) AS count
     FROM bugs_cache
     WHERE state IN ('New', 'Active')
     GROUP BY bug_type
   `).all() as { bug_type: string; count: number }[];
 
-  const counts: Record<string, number> = {};
-  let total = 0;
-  for (const row of rows) {
-    counts[row.bug_type] = row.count;
-    total += row.count;
+  const openCounts: Record<string, number> = {};
+  let openTotal = 0;
+  for (const row of openRows) {
+    openCounts[row.bug_type] = row.count;
+    openTotal += row.count;
   }
 
+  // Section 2 — Zones de triage (bugs non répartis dans les équipes)
+  // On ne compte que les bugs ouverts : un bug Closed/Resolved en zone de triage ne demande plus d'action.
+  const triageRows = db.prepare(`
+    SELECT team, COUNT(*) AS count
+    FROM bugs_cache
+    WHERE team IN ('Bugs à prioriser', 'Bugs à corriger LIVE', 'Bugs à corriger OnPremise', 'Bugs à corriger Hors versions')
+      AND state IN ('New', 'Active')
+    GROUP BY team
+  `).all() as { team: string; count: number }[];
+
+  const byTeam: Record<string, number> = {};
+  for (const row of triageRows) byTeam[row.team] = row.count;
+
+  // Section 3 — Vigilance
   const anomalies = (db.prepare(`
     SELECT COUNT(*) AS n FROM conformity_violations WHERE resolved_at IS NULL
   `).get() as { n: number }).n;
@@ -208,16 +227,55 @@ router.get('/stats/home', (_req, res) => {
     SELECT COUNT(*) AS n FROM bugs_cache WHERE state = 'Resolved'
   `).get() as { n: number }).n;
 
+  // resolved_date peut être NULL pour les anciens imports → fallback sur changed_date
+  const resolvedOld = (db.prepare(`
+    SELECT COUNT(*) AS n FROM bugs_cache
+    WHERE state = 'Resolved'
+      AND COALESCE(resolved_date, changed_date) <= date('now', '-5 days')
+  `).get() as { n: number }).n;
+
+  const trend = db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM bugs_cache WHERE created_date >= date('now', '-7 days')) AS created,
+      (SELECT COUNT(*) FROM bugs_cache
+        WHERE state IN ('Resolved', 'Closed')
+          AND COALESCE(resolved_date, closed_date, changed_date) >= date('now', '-7 days')) AS resolved
+  `).get() as { created: number; resolved: number };
+
+  // Section 4 — Bugs anciens (>6 mois) par type de version
+  const oldRows = db.prepare(`
+    SELECT classify_bug(version_souhaitee, found_in, integration_build, raison_origine, title) AS bug_type, COUNT(*) AS count
+    FROM bugs_cache
+    WHERE state IN ('New', 'Active')
+      AND created_date <= date('now', '-6 months')
+    GROUP BY bug_type
+  `).all() as { bug_type: string; count: number }[];
+
+  const oldCounts: Record<string, number> = {};
+  for (const row of oldRows) oldCounts[row.bug_type] = row.count;
+
   res.json({
     open_bugs: {
-      total,
-      live:          counts['live']          ?? 0,
-      onpremise:     counts['onpremise']      ?? 0,
-      hors_version:  counts['hors_version']   ?? 0,
-      uncategorized: counts['uncategorized']  ?? 0,
+      total:         openTotal,
+      live:          openCounts['live']          ?? 0,
+      onpremise:     openCounts['onpremise']     ?? 0,
+      hors_version:  openCounts['hors_version']  ?? 0,
+      uncategorized: openCounts['uncategorized'] ?? 0,
     },
-    resolved_bugs: { total: resolved },
+    triage: {
+      prioritiser:           byTeam['Bugs à prioriser']              ?? 0,
+      corriger_live:         byTeam['Bugs à corriger LIVE']          ?? 0,
+      corriger_onpremise:    byTeam['Bugs à corriger OnPremise']     ?? 0,
+      corriger_hors_version: byTeam['Bugs à corriger Hors versions'] ?? 0,
+    },
+    resolved_bugs: { total: resolved, older_than_5d: resolvedOld },
     anomalies: { total: anomalies },
+    trend_7d: { created: trend.created, resolved: trend.resolved },
+    old_bugs: {
+      live:      oldCounts['live']      ?? 0,
+      onpremise: oldCounts['onpremise'] ?? 0,
+      other:     (oldCounts['hors_version'] ?? 0) + (oldCounts['uncategorized'] ?? 0),
+    },
   });
 });
 

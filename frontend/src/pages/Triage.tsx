@@ -174,7 +174,11 @@ export default function Triage() {
   const navigate = useNavigate();
 
   const [triageStats, setTriageStats] = useState<TriageStats | null>(null);
-  const [activeCard, setActiveCard]   = useState<ActiveCard>(null);
+  const [activeCard, setActiveCard]   = useState<ActiveCard>(() => {
+    const c = searchParams.get('card');
+    const valid = ['prioritiser', 'corriger_live', 'corriger_onpremise', 'corriger_hors_version', 'old_6months'];
+    return c && valid.includes(c) ? (c as ActiveCard) : null;
+  });
 
   const [bugs, setBugs]       = useState<Bug[]>([]);
   const [total, setTotal]     = useState(0);
@@ -389,7 +393,12 @@ export default function Triage() {
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
-    <Layout title="Bugs" actions={<SyncButton step={syncStep} onClick={runSync} />}>
+    <Layout title="Bugs" actions={
+      <div className="flex items-center gap-4">
+        <span className="text-sm text-gray-500"><strong className="text-[#2B2B2B]">{total.toLocaleString('fr-FR')}</strong> bug{total !== 1 ? 's' : ''}</span>
+        <SyncButton step={syncStep} onClick={runSync} />
+      </div>
+    }>
 
       {syncResult && (
         <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-5 py-3 text-sm text-blue-700">

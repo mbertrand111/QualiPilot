@@ -12,8 +12,16 @@ interface HomeStats {
     hors_version: number;
     uncategorized: number;
   };
-  resolved_bugs: { total: number };
+  triage: {
+    prioritiser: number;
+    corriger_live: number;
+    corriger_onpremise: number;
+    corriger_hors_version: number;
+  };
+  resolved_bugs: { total: number; older_than_5d: number };
   anomalies: { total: number };
+  trend_7d: { created: number; resolved: number };
+  old_bugs: { live: number; onpremise: number; other: number };
 }
 
 interface StatCardProps {
@@ -54,8 +62,11 @@ export function Home() {
 
   const loadStats = useCallback(() => {
     fetch('/api/stats/home')
-      .then(r => r.json())
-      .then(setStats)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then(data => { setStats(data); setStatsError(null); })
       .catch(() => { setStatsError('Impossible de charger les statistiques.'); });
   }, []);
 
@@ -73,7 +84,11 @@ export function Home() {
   } = useSyncAndEvaluate(loadStats);
 
   const ob = stats?.open_bugs;
+  const tr = stats?.triage;
   const rb = stats?.resolved_bugs;
+  const old = stats?.old_bugs;
+  const tnd = stats?.trend_7d;
+  const trendNet = tnd ? tnd.created - tnd.resolved : null;
 
   return (
     <Layout title="Tableau de bord" actions={
@@ -105,10 +120,10 @@ export function Home() {
         </div>
       )}
 
-      {/* Section — Bugs ouverts par type */}
-      <div className="mb-2">
-        <h2 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Bugs</h2>
-        <div className="grid grid-cols-6 gap-4 mb-7">
+      {/* Section 1 — Bugs ouverts par type */}
+      <div className="mb-7">
+        <h2 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Bugs ouverts par type</h2>
+        <div className="grid grid-cols-5 gap-4">
           <StatCard
             label="Total"
             value={ob?.total ?? '…'}
@@ -144,32 +159,99 @@ export function Home() {
             color="gray"
             onClick={() => navigate('/triage?bug_type=uncategorized')}
           />
+        </div>
+      </div>
+
+      {/* Section 2 — À trier (zones non assignées) */}
+      <div className="mb-7">
+        <h2 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-3">À trier — bugs non répartis dans les équipes</h2>
+        <div className="grid grid-cols-4 gap-4">
           <StatCard
-            label="Resolved"
-            value={rb?.total ?? '…'}
-            sub="Voir les plus récents"
-            color="red"
-            onClick={() => navigate('/triage?state=Resolved&sort=changed_date&dir=desc')}
+            label="À prioriser"
+            value={tr?.prioritiser ?? '…'}
+            sub="Sans zone définie"
+            color="amber"
+            onClick={() => navigate('/triage?card=prioritiser')}
+          />
+          <StatCard
+            label="À corriger — Live"
+            value={tr?.corriger_live ?? '…'}
+            sub="Backlog Live à dispatcher"
+            color="green"
+            onClick={() => navigate('/triage?card=corriger_live')}
+          />
+          <StatCard
+            label="À corriger — OnPremise"
+            value={tr?.corriger_onpremise ?? '…'}
+            sub="Backlog OnPremise à dispatcher"
+            color="violet"
+            onClick={() => navigate('/triage?card=corriger_onpremise')}
+          />
+          <StatCard
+            label="À corriger — Hors version"
+            value={tr?.corriger_hors_version ?? '…'}
+            sub="Backlog hors version à dispatcher"
+            color="gray"
+            onClick={() => navigate('/triage?card=corriger_hors_version')}
           />
         </div>
       </div>
 
-      {/* Section — Actions rapides */}
-      <div className="grid grid-cols-2 gap-4">
-        <StatCard
-          label="Anomalies actives"
-          value={stats?.anomalies.total ?? '…'}
-          sub="Voir les anomalies →"
-          color="red"
-          onClick={() => navigate('/conformity')}
-        />
-        <StatCard
-          label="Bugs à trier"
-          value=""
-          sub="Bugs à prioriser / corriger →"
-          color="amber"
-          onClick={() => navigate('/triage')}
-        />
+      <hr className="border-t border-gray-100 my-6" />
+
+      {/* Section 3 — À surveiller */}
+      <div className="mb-7">
+        <h2 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-3">À surveiller</h2>
+        <div className="grid grid-cols-3 gap-4">
+          <StatCard
+            label="Resolved en attente"
+            value={rb?.total ?? '…'}
+            sub={rb ? `dont ${rb.older_than_5d} en attente >5j` : 'Tests à valider'}
+            color="red"
+            onClick={() => navigate('/triage?state=Resolved&sort=changed_date&dir=desc')}
+          />
+          <StatCard
+            label="Anomalies actives"
+            value={stats?.anomalies.total ?? '…'}
+            sub="Voir les anomalies →"
+            color="red"
+            onClick={() => navigate('/conformity')}
+          />
+          <StatCard
+            label="Évolution 7 jours"
+            value={trendNet === null ? '…' : (trendNet > 0 ? `+${trendNet}` : `${trendNet}`)}
+            sub={tnd ? `+${tnd.created} créés · −${tnd.resolved} résolus` : 'Solde net hebdo'}
+            color="blue"
+          />
+        </div>
+      </div>
+
+      {/* Section 4 — Bugs anciens (>6 mois) */}
+      <div>
+        <h2 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Bugs anciens — ouverts depuis +6 mois</h2>
+        <div className="grid grid-cols-3 gap-4">
+          <StatCard
+            label="Live"
+            value={old?.live ?? '…'}
+            sub="Versions FAH"
+            color="green"
+            onClick={() => navigate('/triage?card=old_6months&bug_type=live')}
+          />
+          <StatCard
+            label="OnPremise"
+            value={old?.onpremise ?? '…'}
+            sub="Versions historiques"
+            color="violet"
+            onClick={() => navigate('/triage?card=old_6months&bug_type=onpremise')}
+          />
+          <StatCard
+            label="Autre"
+            value={old?.other ?? '…'}
+            sub="Hors version + Non catégorisés"
+            color="amber"
+            onClick={() => navigate('/triage?card=old_6months&bug_type=hors_version,uncategorized')}
+          />
+        </div>
       </div>
     </Layout>
   );
