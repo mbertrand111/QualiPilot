@@ -457,6 +457,8 @@ function DefectDebtTab({ refreshKey }: { refreshKey: number }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPis, setSelectedPis] = useState<Set<string>>(new Set());
+  const [defaultPi, setDefaultPi] = useState<string>('');
+  const [hasInitializedSelection, setHasInitializedSelection] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -464,10 +466,19 @@ function DefectDebtTab({ refreshKey }: { refreshKey: number }) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch('/api/kpis/defect-debt');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const [debtRes, followupRes] = await Promise.all([
+          fetch('/api/kpis/defect-debt'),
+          fetch('/api/kpis/pi-followup'),
+        ]);
+        if (!debtRes.ok) throw new Error(`HTTP ${debtRes.status}`);
+        const data = await debtRes.json();
         if (!cancelled && Array.isArray(data)) setRows(data);
+        if (followupRes.ok) {
+          const followupPayload = await followupRes.json();
+          if (!cancelled && typeof followupPayload?.defaultPi === 'string') {
+            setDefaultPi(followupPayload.defaultPi);
+          }
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Erreur inconnue');
       } finally {
@@ -482,11 +493,22 @@ function DefectDebtTab({ refreshKey }: { refreshKey: number }) {
     const available = new Set(rows.map((d) => d.pi));
     setSelectedPis((prev) => {
       if (available.size === 0) return new Set();
+      if (!hasInitializedSelection) {
+        if (defaultPi && available.has(defaultPi)) {
+          setHasInitializedSelection(true);
+          return new Set([defaultPi]);
+        }
+        if (rows.length > 0) {
+          setHasInitializedSelection(true);
+          return new Set([rows[rows.length - 1].pi]);
+        }
+        return new Set();
+      }
       if (prev.size === 0) return available;
       const next = new Set([...prev].filter((pi) => available.has(pi)));
       return next.size > 0 ? next : available;
     });
-  }, [rows]);
+  }, [rows, defaultPi, hasInitializedSelection]);
 
   const filtered = rows.filter((d) => selectedPis.has(d.pi));
 
